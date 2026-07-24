@@ -428,7 +428,9 @@ export function VoiceControl({
             <motion.span
               initial={{ opacity: 0, filter: 'blur(6px)' }}
               animate={{ opacity: 1, filter: 'blur(0px)', transition: { delay: 0.16 } }}
-              className="relative flex w-full items-center pl-5 pr-3"
+              // The wider left inset suits the arrow + label; once the chips
+              // span the pill (ready) the insets match.
+              className={`relative flex w-full items-center ${ready ? 'px-3' : 'pl-5 pr-3'}`}
             >
               {stage === 'booking' || stage === 'receipt' ? (
                 <span className="mx-auto text-[13px] font-medium whitespace-nowrap text-white/85">
@@ -444,7 +446,10 @@ export function VoiceControl({
                       </span>
                     </>
                   )}
-                  <span className="ml-auto flex items-center gap-1.5">
+                  {/* Once ready the tokens row takes the full pill width so
+                      the Book chip stretches into the space the follow-up
+                      label vacated. */}
+                  <span className={`ml-auto flex items-center gap-1.5 ${ready ? 'w-full' : ''}`}>
                     <SlotToken
                       label={flow.slots.time ?? 'Time'}
                       filled={!!flow.slots.time}
@@ -473,7 +478,7 @@ export function VoiceControl({
                           e.stopPropagation()
                           flow.confirm()
                         }}
-                        className="flex h-10 cursor-pointer items-center rounded-full bg-white px-4 text-[13px] font-semibold whitespace-nowrap text-ink"
+                        className="flex h-10 flex-1 cursor-pointer items-center justify-center rounded-full bg-white px-4 text-[13px] font-semibold whitespace-nowrap text-ink"
                       >
                         Book
                       </motion.span>

@@ -36,6 +36,14 @@ await page.screenshot({ path: '/tmp/followup-3.png', clip })
 await page.waitForTimeout(3200)
 await page.screenshot({ path: '/tmp/followup-4.png', clip })
 
+// Fill party too — the ready state's Book chip should stretch to fill
+// the pill's free space.
+await page.getByRole('button', { name: 'Party' }).click()
+await page.waitForTimeout(500)
+await page.getByRole('button', { name: '4', exact: true }).click()
+await page.waitForTimeout(800)
+await page.screenshot({ path: '/tmp/followup-ready.png', clip })
+
 // Change of heart — the cancel circle should abandon the follow-up and
 // morph the pill back down to the orb.
 await page.getByRole('button', { name: 'Cancel reservation follow-up' }).click()
