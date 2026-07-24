@@ -84,10 +84,12 @@ void main() {
   float s = abs(tt);
 
   // The liquid front. Coverage advances from the bottom split point up both
-  // sides; fbm wobbles the meniscus so it pours instead of wiping, settling
-  // as the reveal completes.
-  float wob = (fbm(vec2(s * 3.2 + 7.0, time * 0.8)) - 0.5) * (0.26 - reveal * 0.18);
-  float front = reveal * 1.14;
+  // sides; fbm wobbles the meniscus so it pours instead of wiping. The
+  // wobble dies to zero and the front overshoots past the seam (front-0.2
+  // reaches 1.14 > s max of 1.0) as the reveal completes, so the ring seals
+  // rock-solid at the top instead of writhing at the meeting point.
+  float wob = (fbm(vec2(s * 3.2 + 7.0, time * 0.8)) - 0.5) * 0.26 * (1.0 - reveal);
+  float front = reveal * 1.34;
   float cov = smoothstep(front, front - 0.2, s + wob);
 
   // Breathing: slow swell plus the live mic level blooming the ring.
@@ -245,10 +247,11 @@ export function EdgeAura({
     let reveal = 0
     let elapsed = 0
     let last = 0
+    let level = 0
 
     const draw = () => {
       gl.uniform4f(uA, vw, vh, elapsed, reveal)
-      gl.uniform4f(uB, levelRef.current, radius * dpr, THICKNESS * dpr, 0)
+      gl.uniform4f(uB, level, radius * dpr, THICKNESS * dpr, 0)
       gl.drawArrays(gl.TRIANGLES, 0, 3)
     }
 
@@ -260,6 +263,11 @@ export function EdgeAura({
       const target = activeRef.current ? 1 : 0
       reveal += (target > reveal ? dt / OPEN_S : -dt / CLOSE_S)
       reveal = Math.min(Math.max(reveal, 0), 1)
+
+      // Raw RMS is noisy frame to frame; smooth it (fast attack, slower
+      // release) so the ring blooms with speech instead of strobing.
+      const raw = levelRef.current
+      level += (raw - level) * (1 - Math.exp(-dt * (raw > level ? 10 : 4)))
 
       if (reveal <= 0 && !activeRef.current) {
         // Fully drained — clear once and sleep until the next activation.
