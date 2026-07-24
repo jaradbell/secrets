@@ -1,0 +1,10 @@
+import { chromium } from 'playwright-core'
+const browser = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' })
+const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } })
+page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log(m.type(), m.text().slice(0, 300)) })
+page.on('pageerror', (e) => console.log('PAGEERROR', String(e).slice(0, 500)))
+await page.goto('http://localhost:5173/#transaction', { waitUntil: 'networkidle' })
+await page.waitForTimeout(2500)
+await page.screenshot({ path: '/tmp/txn-yelp.png' })
+await browser.close()
+console.log('done')

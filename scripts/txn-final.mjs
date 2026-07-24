@@ -1,0 +1,15 @@
+import { chromium } from 'playwright-core'
+const browser = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' })
+const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } })
+await page.goto('http://localhost:5173/#transaction', { waitUntil: 'networkidle' })
+await page.waitForTimeout(1500)
+await page.click('button[aria-label="Google Places"]')
+await page.waitForTimeout(1000)
+// Tap the true center of the front card to advance the deck.
+const box = await page.locator('[aria-roledescription="carousel"]').boundingBox()
+await page.mouse.click(box.x + box.width / 2, box.y + 55)
+await page.waitForTimeout(1000)
+await page.screenshot({ path: '/tmp/txn-advance.png' })
+const txt = await page.evaluate(() => document.querySelector('[aria-roledescription="carousel"]')?.textContent?.slice(0, 60))
+console.log('front after tap:', txt)
+await browser.close()

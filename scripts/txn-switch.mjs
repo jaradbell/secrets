@@ -1,0 +1,16 @@
+import { chromium } from 'playwright-core'
+const browser = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' })
+const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } })
+page.on('response', (r) => { if (r.status() >= 400) console.log('HTTP', r.status(), r.url()) })
+await page.goto('http://localhost:5173/#transaction', { waitUntil: 'networkidle' })
+await page.waitForTimeout(1200)
+// Switch provider to Google Places
+await page.click('button[aria-label="Google Places"]')
+await page.waitForTimeout(1200)
+await page.screenshot({ path: '/tmp/txn-google.png' })
+// Advance the stack once (tap front card)
+await page.mouse.click(512, 465)
+await page.waitForTimeout(900)
+await page.screenshot({ path: '/tmp/txn-google-2nd.png' })
+await browser.close()
+console.log('done')
