@@ -475,15 +475,16 @@ export function PlaceDetailsView({
         </motion.div>
       </div>
 
-      {/* Fixed scrim behind the voice dock — content dissolves toward the
-          sheet color instead of colliding with the floating orb. */}
+      {/* Fixed scrim behind the voice dock — solid through the dock and its
+          support text, easing out above, so the label never collides with
+          content scrolled beneath. */}
       <motion.div
         {...FADE}
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-[180px]"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-[210px]"
         style={{
           background:
-            'linear-gradient(to top, #fcfcfc 0%, rgba(252,252,252,0.88) 45%, rgba(252,252,252,0) 100%)',
+            'linear-gradient(to top, #fcfcfc 0%, #fcfcfc 45%, rgba(252,252,252,0.62) 68%, rgba(252,252,252,0) 100%)',
         }}
       />
     </motion.div>

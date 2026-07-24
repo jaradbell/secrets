@@ -19,9 +19,12 @@ const STATE_META: Record<VoiceStatus, { label: string }> = {
 /** Orb diameter — thumb scale, comfortably tappable (≥ 44pt hit target). */
 const ORB_SIZE = 72
 
-/** Follow-up pill dimensions — the orb stretches into this affordance. */
-const PILL_W = 324
+/** Follow-up pill dimensions — the orb stretches into this affordance.
+    Sized so the pill plus the cancel circle (56px + 8px gap) fits the
+    frame's ~361px content width. */
+const PILL_W = 296
 const PILL_H = 64
+const CANCEL_SIZE = 56
 
 /** Presses shorter than this are taps (toggle); longer are hold-to-talk. */
 const HOLD_MS = 450
@@ -223,6 +226,35 @@ export function VoiceControl({
         ? 'Booking\u2026'
         : (error ?? meta.label)
 
+  // The agent's side of the follow-up — asks for whatever context is still
+  // missing, and acknowledges once the intent is complete. Keyed copy so
+  // each change develops in fresh above the pill.
+  const followUpPrompt =
+    stage === 'followUp' && flow
+      ? ready
+        ? `Great \u2014 ${flow.slots.time} for ${flow.slots.party}. Book it?`
+        : !flow.slots.time && !flow.slots.party
+          ? `Happy to book${flow.place ? ` ${flow.place}` : ''} \u2014 what time, and how many of you?`
+          : !flow.slots.time
+            ? `${flow.slots.party} of you \u2014 got it. What time works?`
+            : `${flow.slots.time} \u2014 got it. How many should I book for?`
+      : null
+
+  // The prompt is transient: each new question holds the dock's text slot
+  // for a few seconds, then dissolves and hands the slot back to the hint.
+  const [promptShowing, setPromptShowing] = useState(false)
+  useEffect(() => {
+    if (!followUpPrompt) {
+      setPromptShowing(false)
+      return
+    }
+    setPromptShowing(true)
+    const timer = window.setTimeout(() => setPromptShowing(false), 3000)
+    return () => clearTimeout(timer)
+  }, [followUpPrompt])
+
+  const dockText = promptShowing && followUpPrompt ? followUpPrompt : label
+
   return (
     // No z-index on the root: the dock below carries its own high z so it
     // floats above full-frame overlays (e.g. the place details sheet), which
@@ -250,6 +282,27 @@ export function VoiceControl({
           </p>
         )}
       </div>
+
+      {/* Protective scrim — a clean fade to the sheet color behind the dock
+          and its support text, so the copy never collides with content
+          scrolled beneath. Above the details sheet (z-30), below the dock
+          (z-40). */}
+      <AnimatePresence>
+        {(stage === 'followUp' || stage === 'booking') && (
+          <motion.div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-[35] h-[260px]"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: 'easeOut' }}
+            style={{
+              background:
+                'linear-gradient(to top, #fcfcfc 0%, #fcfcfc 55%, rgba(252,252,252,0.85) 75%, rgba(252,252,252,0) 100%)',
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Dock — label + orb (or follow-up pill) in the thumb zone. Sits above
           overlays (details sheet is z-30) so the composer stays reachable
@@ -336,8 +389,25 @@ export function VoiceControl({
           )}
         </AnimatePresence>
 
-        <p className="text-[13px] font-medium tracking-[-0.01em] text-ink-secondary">{label}</p>
+        {/* The dock's single text slot. The agent's follow-up question takes
+            it over transiently — develops in, holds a beat, dissolves — and
+            the standard hint animates back in its place. */}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.p
+            key={dockText}
+            initial={{ opacity: 0, y: 8, filter: 'blur(6px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, y: -6, filter: 'blur(6px)' }}
+            transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+            className={`pointer-events-none max-w-[300px] text-center text-[13px] font-medium tracking-[-0.01em] ${
+              promptShowing ? 'text-ink' : 'text-ink-secondary'
+            }`}
+          >
+            {dockText}
+          </motion.p>
+        </AnimatePresence>
 
+        <div className="flex items-center justify-center">
         <motion.button
           type="button"
           onPointerDown={onPointerDown}
@@ -360,15 +430,8 @@ export function VoiceControl({
               animate={{ opacity: 1, filter: 'blur(0px)', transition: { delay: 0.16 } }}
               className="relative flex w-full items-center pl-5 pr-3"
             >
-              <span className="pointer-events-none shrink-0">
-                <VoiceGlyph
-                  status={stage === 'booking' || stage === 'receipt' ? 'thinking' : status}
-                  levelRef={levelRef}
-                  size={22}
-                />
-              </span>
               {stage === 'booking' || stage === 'receipt' ? (
-                <span className="ml-3 text-[13px] font-medium whitespace-nowrap text-white/85">
+                <span className="mx-auto text-[13px] font-medium whitespace-nowrap text-white/85">
                   Booking {flow.slots.time} for {flow.slots.party}&hellip;
                 </span>
               ) : (
@@ -427,6 +490,54 @@ export function VoiceControl({
             </span>
           )}
         </motion.button>
+
+        {/* Escape hatch — a sibling circle in the pill's material, outside
+            the morph, that abandons the follow-up. Slides in once the pill
+            has stretched; collapses away (width and margin to zero) so the
+            group re-centers smoothly in both directions. */}
+        <AnimatePresence>
+          {stage === 'followUp' && flow && (
+            <motion.button
+              key="cancel"
+              type="button"
+              aria-label="Cancel reservation follow-up"
+              initial={{ width: 0, marginLeft: 0, opacity: 0, scale: 0.6 }}
+              animate={{
+                width: CANCEL_SIZE,
+                marginLeft: 8,
+                opacity: 1,
+                scale: 1,
+                transition: {
+                  delay: 0.16,
+                  type: 'spring',
+                  stiffness: 380,
+                  damping: 30,
+                },
+              }}
+              exit={{
+                width: 0,
+                marginLeft: 0,
+                opacity: 0,
+                scale: 0.6,
+                transition: { duration: 0.22, ease: [0.4, 0, 0.2, 1] },
+              }}
+              whileTap={{ scale: 0.92 }}
+              onClick={() => flow.dismiss()}
+              className="flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-[#17141b] outline-none select-none"
+              style={{ height: CANCEL_SIZE }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path
+                  d="M3.5 3.5 12.5 12.5M12.5 3.5 3.5 12.5"
+                  stroke="rgba(255,255,255,0.85)"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </motion.button>
+          )}
+        </AnimatePresence>
+        </div>
       </motion.div>
 
       {/* Transaction completed — black fades in behind the blurred-out pill. */}
