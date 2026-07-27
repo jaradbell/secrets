@@ -49,10 +49,13 @@ export function VoiceOrb({
     <div
       ref={bodyRef}
       aria-hidden="true"
-      className="rounded-full transition-shadow duration-500"
+      className="transition-shadow duration-500"
       style={{
         width: size === 'fill' ? '100%' : size,
         height: size === 'fill' ? '100%' : size,
+        // In fill mode the radius rides the animating parent (orb → pill →
+        // card morphs); standalone it's simply a disc.
+        borderRadius: size === 'fill' ? 'inherit' : '9999px',
         // Near-black with a whisper of warmth, faintly lit from the top so
         // it reads as an object rather than a hole.
         background:

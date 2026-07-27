@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { MobileAppShell } from '../components/shell/MobileAppShell'
+import { RECEIPT_DOCK_SUGGESTIONS } from '../components/receipt/dockSuggestions'
 import { ReservationReceipt as ReceiptReservationReceipt } from '../components/receipt/ReservationReceipt'
 import { TransactionView as ReceiptTransactionView } from '../components/receipt/TransactionView'
 import { ReservationProvider } from '../components/transaction/reservationFlow'
@@ -14,23 +15,51 @@ import { VoiceControl } from '../components/voice/VoiceControl'
  */
 const PROTOTYPES: {
   id: string
+  /** Outline marker in the switcher ("1", "2A", …). */
+  tag: string
   label: string
   ambient: 'full' | 'composer'
   render: () => ReactNode
 }[] = [
   {
     id: 'empty-state',
+    tag: '1',
     label: 'Empty State',
     ambient: 'full',
     render: () => <VoiceControl idleContent={<EmptyState />} />,
   },
+  // Transaction directions — one codebase, four presentations of the
+  // follow-up/confirmation moment (the flow state machine is shared).
   {
-    id: 'transaction',
-    label: 'Transaction',
+    id: 'transaction-2a',
+    tag: '2A',
+    label: 'Composer Transform',
     ambient: 'composer',
     render: () => (
       <ReservationProvider>
-        <VoiceControl idleContent={<TransactionView />} />
+        <VoiceControl followUp="pill" idleContent={<TransactionView variant="2a" />} />
+      </ReservationProvider>
+    ),
+  },
+  {
+    id: 'transaction-2c',
+    tag: '2C',
+    label: 'Return to Conversation',
+    ambient: 'composer',
+    render: () => (
+      <ReservationProvider>
+        <VoiceControl followUp="none" idleContent={<TransactionView variant="2c" />} />
+      </ReservationProvider>
+    ),
+  },
+  {
+    id: 'transaction-2d',
+    tag: '2D',
+    label: 'Checkout',
+    ambient: 'composer',
+    render: () => (
+      <ReservationProvider>
+        <VoiceControl followUp="none" idleContent={<TransactionView variant="2d" />} />
       </ReservationProvider>
     ),
   },
@@ -38,11 +67,17 @@ const PROTOTYPES: {
     // 1:1 fork of Transaction (components copied to src/components/receipt/)
     // — a sandbox to build on without touching the transaction prototype.
     id: 'receipt',
+    tag: '3',
     label: 'Receipt',
     ambient: 'composer',
     render: () => (
       <ReservationProvider>
-        <VoiceControl receipt={ReceiptReservationReceipt} idleContent={<ReceiptTransactionView />} />
+        <VoiceControl
+          receipt={ReceiptReservationReceipt}
+          idleContent={<ReceiptTransactionView />}
+          hideHintWhenFocused
+          suggestions={RECEIPT_DOCK_SUGGESTIONS}
+        />
       </ReservationProvider>
     ),
   },
@@ -79,10 +114,15 @@ export function App() {
           Prototypes
         </p>
         <ol className="flex flex-col gap-1.5">
-          {PROTOTYPES.map((p, i) => {
+          {PROTOTYPES.map((p) => {
             const isActive = p.id === active.id
+            const isSub = p.tag.length > 1
             return (
-              <li key={p.id}>
+              <li key={p.id} className={isSub ? 'pl-3' : ''}>
+                {/* Group heading above the first lettered direction. */}
+                {p.tag === '2A' && (
+                  <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">2. Transaction</p>
+                )}
                 <a
                   href={`#${p.id}`}
                   className={`text-[13px] transition-colors duration-150 ${
@@ -91,7 +131,7 @@ export function App() {
                       : 'text-ink-tertiary hover:text-ink-secondary'
                   }`}
                 >
-                  {i + 1}. {p.label}
+                  {p.tag}. {p.label}
                 </a>
               </li>
             )

@@ -19,12 +19,33 @@ const STATE_META: Record<VoiceStatus, { label: string }> = {
 /** Orb diameter — thumb scale, comfortably tappable (≥ 44pt hit target). */
 const ORB_SIZE = 72
 
+/** Inline dock (details view): the orb stretches into a compact "Follow-up"
+    pill docked right. Expanding glides it left into a disc and deals the
+    suggestion chips out of its trailing edge toward the right. */
+const INLINE_ORB = 56
+const INLINE_PILL_W = 150
+
 /** Follow-up pill dimensions — the orb stretches into this affordance.
     Sized so the pill plus the cancel circle (56px + 8px gap) fits the
     frame's ~361px content width. */
 const PILL_W = 296
 const PILL_H = 64
 const CANCEL_SIZE = 56
+
+/** How the dock presents the reservation follow-up:
+    - 'pill': the orb stretches into the slot-token pill (2A)
+    - 'none': the orb stays put; confirmation lives elsewhere (2C / 2D) */
+export type FollowUpMode = 'pill' | 'none'
+
+/** A tappable chip in the inline dock's expandable suggestion tray. */
+export type DockSuggestion = {
+  id: string
+  label: string
+  icon?: ReactNode
+  /** 'reserve' funnels into the reservation flow against the focused place;
+      everything else is an inert prototype action. */
+  kind?: 'reserve'
+}
 
 /** Presses shorter than this are taps (toggle); longer are hold-to-talk. */
 const HOLD_MS = 450
@@ -62,6 +83,57 @@ function SlotToken({
     >
       {label}
     </span>
+  )
+}
+
+/** Dark options panel for the pill's slot popovers. */
+function PopoverPanel({
+  which,
+  time,
+  party,
+  onPickTime,
+  onPickParty,
+}: {
+  which: 'time' | 'party'
+  time?: string
+  party?: number
+  onPickTime: (t: string) => void
+  onPickParty: (n: number) => void
+}) {
+  return (
+    <div className="rounded-[22px] border border-white/10 bg-[#17141b] p-1.5 shadow-[0_24px_60px_-20px_rgba(10,8,14,0.65)]">
+      {which === 'time' ? (
+        <div className="flex flex-col">
+          {TIME_OPTIONS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => onPickTime(t)}
+              className={`h-10 rounded-[16px] px-7 text-[13px] font-medium whitespace-nowrap outline-none transition-colors duration-150 ${
+                time === t ? 'bg-white text-ink' : 'text-white/80 active:bg-white/10'
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="flex gap-1">
+          {PARTY_OPTIONS.map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => onPickParty(n)}
+              className={`flex size-10 items-center justify-center rounded-full text-[13px] font-medium outline-none transition-colors duration-150 ${
+                party === n ? 'bg-white text-ink' : 'text-white/80 active:bg-white/10'
+              }`}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -108,22 +180,64 @@ function ThreadArrow() {
  */
 export function VoiceControl({
   idleContent,
+  followUp = 'pill',
   receipt: Receipt = ReservationReceipt,
+  hideHintWhenFocused = false,
+  suggestions,
 }: {
   idleContent?: ReactNode
+  followUp?: FollowUpMode
   receipt?: ComponentType<{ place: string; slots: ReservationSlots; onDone: () => void }>
+  /** Drop the resting "Hold or tap to speak" hint while a details sheet has
+      focus (the sheet's own affordances carry the moment). */
+  hideHintWhenFocused?: boolean
+  /** Opt-in inline dock: while a details sheet has focus, the orb morphs
+      into a compact "Follow-up" pill docked right. A tap glides it left and
+      deals these chips out of its wake (hold still pours into listening);
+      tapping again or away tucks them back in. */
+  suggestions?: DockSuggestion[]
 }) {
   const { status, transcript, response, error, levelRef, start, finish } = useVoiceInput()
   const meta = STATE_META[status]
 
   const flow = useReservationFlow()
   const stage = flow?.stage ?? 'none'
-  // Stays pill-shaped through the receipt so the dock blurs out as the pill
-  // (no snap back to the orb mid-handoff).
-  const isPill = stage === 'followUp' || stage === 'booking' || stage === 'receipt'
+  // Dock shape per mode. 'pill' morphs the orb into the slot pill (and stays
+  // pill through booking/receipt so the dock blurs out without snapping
+  // back). 'none' keeps the orb throughout — the confirmation UI lives out
+  // in the content.
+  const isPill =
+    followUp === 'pill' &&
+    (stage === 'followUp' || stage === 'booking' || stage === 'receipt')
   // Both slots filled during follow-up: don't auto-book — surface the
   // explicit "go" and wait for it.
   const ready = stage === 'followUp' && !!flow?.slots.time && !!flow?.slots.party
+
+  // Inline dock: only while a details sheet has focus and no flow is in
+  // flight — the moment a chip (or utterance) starts one, the bar exits and
+  // the orb slides back to center for the pill morph.
+  const inline = !!suggestions?.length && !!flow?.focusedPlace && stage === 'none'
+  const [expanded, setExpanded] = useState(false)
+  // The tray starts dealt out whenever the inline dock appears (drilling in,
+  // or returning from a dismissed follow-up); collapsing it — tap the disc
+  // or tap away — is the user's move. Any active voice state retracts it.
+  useEffect(() => {
+    setExpanded(inline && status === 'idle')
+  }, [inline, status])
+
+  // Tap-away collapse, without blocking: a passive listener retracts the
+  // tray on any press outside the dock, and the press still lands where it
+  // was aimed (scrolling the sheet or tapping Back shouldn't need two taps).
+  const dockRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!(inline && expanded)) return
+    const onPress = (e: PointerEvent) => {
+      if (dockRef.current?.contains(e.target as Node)) return
+      setExpanded(false)
+    }
+    document.addEventListener('pointerdown', onPress)
+    return () => document.removeEventListener('pointerdown', onPress)
+  }, [inline, expanded])
 
   // The aura keys on the press itself so the pour starts the instant the
   // thumb lands — getUserMedia can take hundreds of ms and the glow
@@ -165,8 +279,25 @@ export function VoiceControl({
 
   const pressRef = useRef<{ at: number; startedListening: boolean } | null>(null)
 
+  // Inline pill presses split at HOLD_MS: a quick tap toggles the suggestion
+  // tray (it can't arm the mic, so listening only starts once the hold is
+  // committed), while holding past the threshold pours into listening.
+  const inlinePressRef = useRef<{ timer: number; held: boolean } | null>(null)
+
   const onPointerDown = () => {
     if (stage === 'booking') return // mid-transaction; let it complete
+    if (inline) {
+      if (status !== 'idle') return
+      const press = { timer: 0, held: false }
+      press.timer = window.setTimeout(() => {
+        press.held = true
+        setExpanded(false)
+        void start()
+        setPressing(true)
+      }, HOLD_MS)
+      inlinePressRef.current = press
+      return
+    }
     if (status === 'idle') {
       void start()
       pressRef.current = { at: Date.now(), startedListening: true }
@@ -199,6 +330,19 @@ export function VoiceControl({
 
   const onPointerUp = () => {
     setPressing(false)
+    const inlinePress = inlinePressRef.current
+    if (inlinePress) {
+      inlinePressRef.current = null
+      window.clearTimeout(inlinePress.timer)
+      if (inlinePress.held) {
+        // Held like a walkie-talkie → send on release.
+        finish()
+        simulateUtterance()
+      } else {
+        setExpanded((e) => !e)
+      }
+      return
+    }
     const press = pressRef.current
     pressRef.current = null
     if (!press) return
@@ -215,16 +359,34 @@ export function VoiceControl({
     }
   }
 
+  // A cancelled press never toggles the tray — just tidy up.
+  const onPointerCancel = () => {
+    const inlinePress = inlinePressRef.current
+    if (inlinePress) {
+      inlinePressRef.current = null
+      window.clearTimeout(inlinePress.timer)
+      setPressing(false)
+      if (inlinePress.held) finish()
+      return
+    }
+    onPointerUp()
+  }
+
+  // NBSP keeps the text slot's height (and the orb's position) stable.
+  const restingHint =
+    hideHintWhenFocused && flow?.focusedPlace && status === 'idle' && !error
+      ? '\u00A0' // details sheet has focus — its affordances carry the moment
+      : (error ?? meta.label)
   const label =
     stage === 'followUp'
       ? status === 'listening'
         ? 'Listening\u2026'
         : ready
           ? 'Ready \u2014 book it, or adjust a detail'
-          : 'Hold to speak \u2014 or tap a detail'
+          : '\u00A0' // the follow-up affordances speak for themselves
       : stage === 'booking'
         ? 'Booking\u2026'
-        : (error ?? meta.label)
+        : restingHint
 
   // The agent's side of the follow-up — asks for whatever context is still
   // missing, and acknowledges once the intent is complete. Keyed copy so
@@ -259,7 +421,9 @@ export function VoiceControl({
     // No z-index on the root: the dock below carries its own high z so it
     // floats above full-frame overlays (e.g. the place details sheet), which
     // a stacking context here would trap it under.
-    <div className="relative flex flex-1 flex-col px-4 pt-[var(--safe-top)] pb-[calc(var(--safe-bottom)+24px)]">
+    // min-h-0 keeps the column inside the fixed frame even when the content
+    // slot wants more room (long threads scroll; the dock stays pinned).
+    <div className="relative flex min-h-0 flex-1 flex-col px-4 pt-[var(--safe-top)] pb-[calc(var(--safe-bottom)+24px)]">
       {/* Siri-style edge glow — pours around the frame from press until the
           session ends. Above everything (details sheet z-30, dock z-40) but
           inert. */}
@@ -291,12 +455,16 @@ export function VoiceControl({
         {(stage === 'followUp' || stage === 'booking') && (
           <motion.div
             aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 z-[35] h-[260px]"
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-[35]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.4, ease: 'easeOut' }}
             style={{
+              // Sized to the dock it protects: the pill stands taller than
+              // the bare orb, which needs less — scrolled content clears the
+              // fade sooner and stays interactive.
+              height: followUp === 'none' ? 200 : 260,
               background:
                 'linear-gradient(to top, #fcfcfc 0%, #fcfcfc 55%, rgba(252,252,252,0.85) 75%, rgba(252,252,252,0) 100%)',
             }}
@@ -310,6 +478,7 @@ export function VoiceControl({
           out — swelling and dissolving into a soft blur — and the receipt's
           black fades in behind during the tail of the dissolve. */}
       <motion.div
+        ref={dockRef}
         className="relative z-40 flex flex-col items-center gap-4"
         animate={
           stage === 'receipt'
@@ -327,9 +496,9 @@ export function VoiceControl({
         }
         style={{ pointerEvents: stage === 'receipt' ? 'none' : 'auto' }}
       >
-        {/* Slot popovers — spring up from the pill. */}
+        {/* Slot popovers — spring up from the pill (2A). */}
         <AnimatePresence>
-          {popover && flow && (
+          {popover && flow && followUp === 'pill' && (
             <motion.div
               key={popover}
               initial={{ opacity: 0, scale: 0.88, y: 10 }}
@@ -337,90 +506,88 @@ export function VoiceControl({
               exit={{ opacity: 0, scale: 0.92, y: 8 }}
               transition={{ type: 'spring', stiffness: 420, damping: 30 }}
               // Anchored just above the pill, aligned toward its own token
-              // (the pill is 324px wide, centered; tokens sit at its right).
-              className={`absolute bottom-[74px] origin-bottom-right ${
+              // (the pill is centered; tokens sit at its right).
+              className={`absolute origin-bottom-right ${
                 popover === 'time' ? 'right-[calc(50%-72px)]' : 'right-[calc(50%-150px)]'
               }`}
+              style={{ bottom: PILL_H + 10 }}
             >
-              <div className="rounded-[22px] border border-white/10 bg-[#17141b] p-1.5 shadow-[0_24px_60px_-20px_rgba(10,8,14,0.65)]">
-                {popover === 'time' ? (
-                  <div className="flex flex-col">
-                    {TIME_OPTIONS.map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => {
-                          flow.fillSlots({ time: t })
-                          setPopover(null)
-                        }}
-                        className={`h-10 rounded-[16px] px-7 text-[13px] font-medium whitespace-nowrap outline-none transition-colors duration-150 ${
-                          flow.slots.time === t
-                            ? 'bg-white text-ink'
-                            : 'text-white/80 active:bg-white/10'
-                        }`}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex gap-1">
-                    {PARTY_OPTIONS.map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        onClick={() => {
-                          flow.fillSlots({ party: n })
-                          setPopover(null)
-                        }}
-                        className={`flex size-10 items-center justify-center rounded-full text-[13px] font-medium outline-none transition-colors duration-150 ${
-                          flow.slots.party === n
-                            ? 'bg-white text-ink'
-                            : 'text-white/80 active:bg-white/10'
-                        }`}
-                      >
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <PopoverPanel
+                which={popover}
+                time={flow.slots.time}
+                party={flow.slots.party}
+                onPickTime={(t) => {
+                  flow.fillSlots({ time: t })
+                  setPopover(null)
+                }}
+                onPickParty={(n) => {
+                  flow.fillSlots({ party: n })
+                  setPopover(null)
+                }}
+              />
             </motion.div>
           )}
         </AnimatePresence>
 
         {/* The dock's single text slot. The agent's follow-up question takes
             it over transiently — develops in, holds a beat, dissolves — and
-            the standard hint animates back in its place. */}
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.p
-            key={dockText}
-            initial={{ opacity: 0, y: 8, filter: 'blur(6px)' }}
-            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-            exit={{ opacity: 0, y: -6, filter: 'blur(6px)' }}
-            transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
-            className={`pointer-events-none max-w-[300px] text-center text-[13px] font-medium tracking-[-0.01em] ${
-              promptShowing ? 'text-ink' : 'text-ink-secondary'
-            }`}
-          >
-            {dockText}
-          </motion.p>
-        </AnimatePresence>
+            the standard hint animates back in its place. In the inline dock
+            the bar carries the text instead. */}
+        {!inline && (
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.p
+              key={dockText}
+              initial={{ opacity: 0, y: 8, filter: 'blur(6px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, y: -6, filter: 'blur(6px)' }}
+              transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+              className={`pointer-events-none max-w-[300px] text-center text-[13px] font-medium tracking-[-0.01em] ${
+                promptShowing ? 'text-ink' : 'text-ink-secondary'
+              }`}
+            >
+              {dockText}
+            </motion.p>
+          </AnimatePresence>
+        )}
 
-        <div className="flex items-center justify-center">
+        <div
+          className={`flex items-center ${
+            inline ? (expanded ? 'w-full justify-start' : 'w-full justify-end') : 'justify-center'
+          }`}
+        >
         <motion.button
           type="button"
+          // Position-only layout animation so the button glides between the
+          // right-docked "Follow-up" pill and the left-anchored disc.
+          layout={suggestions?.length ? 'position' : false}
           onPointerDown={onPointerDown}
           onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-          aria-label={label}
-          className="relative flex items-center justify-center rounded-full outline-none touch-none select-none"
-          animate={{ width: isPill ? PILL_W : ORB_SIZE, height: isPill ? PILL_H : ORB_SIZE }}
+          onPointerCancel={onPointerCancel}
+          aria-label={label.trim() || 'Voice input'}
+          aria-expanded={inline ? expanded : undefined}
+          className="relative flex shrink-0 items-center justify-center overflow-hidden outline-none touch-none select-none"
+          // Capsule: never animate radius — an over-large value clamps to
+          // half the shorter side, so width/height springs stretch a perfect
+          // pill instead of warping through mismatched corner radii.
+          style={{ borderRadius: 9999 }}
+          animate={{
+            width: isPill ? PILL_W : inline ? (expanded ? INLINE_ORB : INLINE_PILL_W) : ORB_SIZE,
+            height: isPill ? PILL_H : inline ? INLINE_ORB : ORB_SIZE,
+          }}
           whileTap={{ scale: 0.96 }}
-          transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+          transition={{
+            type: 'spring',
+            stiffness: 280,
+            damping: 24,
+            layout: { type: 'spring', stiffness: 280, damping: 24 },
+          }}
         >
-          {/* The dark body — stretches from disc to pill with the button. */}
-          <div className="pointer-events-none absolute inset-0">
+          {/* The dark body — stretches from disc to pill with the button
+              (radius rides along via inherit). */}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{ borderRadius: 'inherit' }}
+          >
             <VoiceOrb status={status} levelRef={levelRef} size="fill" />
           </div>
 
@@ -489,19 +656,98 @@ export function VoiceControl({
             </motion.span>
           ) : (
             /* The verb, in light dots on the dark body — our own glyph with
-               fully continuous motion (no lattice stepping). */
-            <span className="pointer-events-none relative">
-              <VoiceGlyph status={status} levelRef={levelRef} size={30} />
+               fully continuous motion (no lattice stepping). Inline, the
+               pill carries its name beside the dots; the label melts away
+               as the pill condenses to a disc. */
+            <span className="pointer-events-none relative flex items-center gap-2">
+              <VoiceGlyph status={status} levelRef={levelRef} size={inline ? 22 : 30} />
+              <AnimatePresence initial={false}>
+                {inline && !expanded && (
+                  <motion.span
+                    key="follow-up"
+                    initial={{ opacity: 0, filter: 'blur(4px)' }}
+                    animate={{
+                      opacity: 1,
+                      filter: 'blur(0px)',
+                      transition: { delay: 0.1, duration: 0.24 },
+                    }}
+                    exit={{ opacity: 0, filter: 'blur(4px)', transition: { duration: 0.12 } }}
+                    className="text-[13px] font-medium whitespace-nowrap text-white/70"
+                  >
+                    Follow-up
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </span>
           )}
         </motion.button>
+
+          {/* Suggestion chips — dealt out of the button's trailing edge as it
+              glides left. Natural order, staggered rightward so "Get
+              reservation" emerges first; the hand bleeds off the right frame
+              edge and dissolves back into the disc when scrolled left. */}
+          <AnimatePresence initial={false}>
+            {inline && expanded && suggestions && (
+              <motion.div
+                key="chips"
+                initial={{ opacity: 0, x: -28 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{
+                  opacity: 0,
+                  x: -32,
+                  transition: { duration: 0.2, ease: [0.4, 0, 0.2, 1] },
+                }}
+                transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+                className="-my-2 -mr-4 ml-3 min-w-0 flex-1 overflow-x-auto py-2"
+                style={{
+                  scrollbarWidth: 'none',
+                  maskImage:
+                    'linear-gradient(to right, transparent 0, black 20px, black 100%)',
+                  WebkitMaskImage:
+                    'linear-gradient(to right, transparent 0, black 20px, black 100%)',
+                }}
+              >
+                <div className="flex w-max items-center gap-2 pl-5">
+                  {suggestions.map((s, i) => (
+                    <motion.button
+                      key={s.id}
+                      type="button"
+                      initial={{ opacity: 0, x: -40, scale: 0.9 }}
+                      animate={{
+                        opacity: 1,
+                        x: 0,
+                        scale: 1,
+                        transition: {
+                          delay: 0.06 + 0.045 * i,
+                          type: 'spring',
+                          stiffness: 380,
+                          damping: 26,
+                        },
+                      }}
+                      onClick={() => {
+                        if (s.kind === 'reserve' && flow?.focusedPlace) {
+                          flow.begin({}, flow.focusedPlace)
+                        }
+                        setExpanded(false)
+                      }}
+                      className="flex shrink-0 items-center gap-2 rounded-full bg-ink px-5 text-[14px] leading-[18px] text-white outline-none transition-transform duration-200 ease-out active:scale-[0.97]"
+                      style={{ height: INLINE_ORB }}
+                    >
+                      {s.icon}
+                      {s.label}
+                    </motion.button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
         {/* Escape hatch — a sibling circle in the pill's material, outside
             the morph, that abandons the follow-up. Slides in once the pill
             has stretched; collapses away (width and margin to zero) so the
             group re-centers smoothly in both directions. */}
         <AnimatePresence>
-          {stage === 'followUp' && flow && (
+          {stage === 'followUp' && followUp === 'pill' && flow && (
             <motion.button
               key="cancel"
               type="button"
