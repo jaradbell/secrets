@@ -75,7 +75,7 @@ export function ReservationReceipt({
         <motion.div {...develop(2)} className="mt-2.5">
           <p className="text-[15px] leading-snug text-white/85">{place}</p>
           <p className="mt-1 text-[14px] leading-snug text-white/55">
-            Saturday · {slots.time ?? '7:30 PM'} ·{' '}
+            {slots.date?.split(',')[0] ?? 'Saturday'} · {slots.time ?? '7:30 PM'} ·{' '}
             {slots.party ? `${slots.party} guests` : '2 guests'}
           </p>
         </motion.div>

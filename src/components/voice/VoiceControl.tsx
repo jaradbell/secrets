@@ -325,6 +325,10 @@ export function VoiceControl({
       if (!flow.slots.time) missing.time = '7:30 PM'
       if (!flow.slots.party) missing.party = 2
       if (missing.time || missing.party) flow.fillSlots(missing)
+      // Slots already complete and nothing was actually heard — treat the
+      // hold as the "book it". With a real transcript, defer to the parse
+      // effect so "make it Sunday" edits instead of booking.
+      else if (!transcript.trim()) flow.confirm()
     }
   }
 
@@ -394,7 +398,7 @@ export function VoiceControl({
   const followUpPrompt =
     stage === 'followUp' && flow
       ? ready
-        ? `Great \u2014 ${flow.slots.time} for ${flow.slots.party}. Book it?`
+        ? `Great \u2014 ${flow.slots.date ? `${flow.slots.date}, ` : ''}${flow.slots.time} for ${flow.slots.party}. Book it?`
         : !flow.slots.time && !flow.slots.party
           ? `Happy to book${flow.place ? ` ${flow.place}` : ''} \u2014 what time, and how many of you?`
           : !flow.slots.time

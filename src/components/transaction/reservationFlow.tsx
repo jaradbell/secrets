@@ -11,9 +11,10 @@
  *              ↘ booking (full intent spoken up front) ↗
  *
  * Follow-up never auto-books: filling Time and Party is answering questions,
- * not pulling the trigger — the transaction waits for confirm(). Only an
- * intent that arrives with full context ("book it for 2 at 7:30") skips
- * straight to booking, because the user already said the verb.
+ * not pulling the trigger — the transaction waits for confirm(). The verb can
+ * be spoken too: an utterance carrying confirm intent ("book it", "yes")
+ * commits once the slots are complete, and an intent that arrives with full
+ * context up front ("book it for 2 at 7:30") skips straight to booking.
  */
 import {
   createContext,
@@ -25,7 +26,7 @@ import {
   type ReactNode,
 } from 'react'
 
-export type ReservationSlots = { time?: string; party?: number }
+export type ReservationSlots = { date?: string; time?: string; party?: number }
 export type ReservationStage = 'none' | 'followUp' | 'booking' | 'receipt'
 
 type ReservationFlow = {
@@ -57,9 +58,38 @@ export const useReservationFlow = () => useContext(Ctx)
 /** Simulated booking latency before the receipt takes over. */
 const BOOKING_MS = 1500
 
+/** The ask was anchored on Saturday, Jul 25 — spoken weekday mentions land
+    in that prototype week. */
+const DATE_LABELS: Record<string, string> = {
+  saturday: 'Saturday, Jul 25',
+  sunday: 'Sunday, Jul 26',
+  monday: 'Monday, Jul 27',
+  tuesday: 'Tuesday, Jul 28',
+  wednesday: 'Wednesday, Jul 29',
+  thursday: 'Thursday, Jul 30',
+  friday: 'Friday, Jul 31',
+}
+
+/** Did the utterance carry the booking verb ("book it", "confirm", a plain
+    "yes" to the agent's "Book it?"), as opposed to just answering slots? */
+export function parseConfirmIntent(text: string): boolean {
+  return /\b(book it|book the table|book that|confirm|go ahead|lock it in|make the reservation|yes|yeah|yep|do it)\b/i.test(
+    text,
+  )
+}
+
 /** Prototype-grade slot extraction from a spoken utterance. */
 export function parseReservationUtterance(text: string): ReservationSlots {
   const slots: ReservationSlots = {}
+
+  const day = text.match(
+    /\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday|tomorrow|tonight|today)\b/i,
+  )
+  if (day) {
+    const raw = day[1].toLowerCase()
+    const key = raw === 'tomorrow' ? 'sunday' : raw === 'tonight' || raw === 'today' ? 'saturday' : raw
+    slots.date = DATE_LABELS[key]
+  }
 
   const party =
     text.match(/\b(?:for|party of|table for)\s+(\d{1,2})\b/i) ??
@@ -117,9 +147,13 @@ export function ReservationProvider({ children }: { children: ReactNode }) {
   const fillFromUtterance = useCallback(
     (text: string) => {
       const parsed = parseReservationUtterance(text)
-      if (parsed.time || parsed.party) fillSlots(parsed)
+      if (parsed.date || parsed.time || parsed.party) fillSlots(parsed)
+      // The booking verb commits — but only once the merged slots are
+      // complete; "book it" with holes left is still just slot-filling talk.
+      const next = { ...slots, ...parsed }
+      if (parseConfirmIntent(text) && next.time && next.party) toBooking()
     },
-    [fillSlots],
+    [fillSlots, slots, toBooking],
   )
 
   const dismiss = useCallback(() => {
