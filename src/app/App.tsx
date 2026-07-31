@@ -4,6 +4,8 @@ import { RECEIPT_DOCK_SUGGESTIONS } from '../components/receipt/dockSuggestions'
 import { ReservationReceipt as ReceiptReservationReceipt } from '../components/receipt/ReservationReceipt'
 import { TransactionView as ReceiptTransactionView } from '../components/receipt/TransactionView'
 import { ReceiptGallery } from '../components/transaction/ReceiptGallery'
+import { ReceiptGalleryConversation } from '../components/transaction/ReceiptGalleryConversation'
+import { ReceiptGalleryExpressive } from '../components/transaction/ReceiptGalleryExpressive'
 import { ReservationProvider } from '../components/transaction/reservationFlow'
 import { TransactionView } from '../components/transaction/TransactionView'
 import { EmptyState } from '../components/voice/EmptyState'
@@ -94,13 +96,28 @@ const PROTOTYPES: {
       </ReservationProvider>
     ),
   },
+  // Receipt object directions — the in-thread receipt card generalized
+  // across domains (dining / ride / hotel / tickets), two treatments.
   {
-    // Design study: the in-thread receipt card generalized across domains.
     id: 'receipt-objects',
-    tag: '4',
-    label: 'Receipt Objects',
+    tag: '4A',
+    label: 'Object Class',
     ambient: 'composer',
     render: () => <ReceiptGallery />,
+  },
+  {
+    id: 'receipt-objects-4b',
+    tag: '4B',
+    label: 'Expressive',
+    ambient: 'composer',
+    render: () => <ReceiptGalleryExpressive />,
+  },
+  {
+    id: 'receipt-objects-4c',
+    tag: '4C',
+    label: 'In Conversation',
+    ambient: 'composer',
+    render: () => <ReceiptGalleryConversation />,
   },
 ]
 
@@ -140,9 +157,12 @@ export function App() {
             const isSub = p.tag.length > 1
             return (
               <li key={p.id} className={isSub ? 'pl-3' : ''}>
-                {/* Group heading above the first lettered direction. */}
+                {/* Group headings above the first lettered direction. */}
                 {p.tag === '2A' && (
                   <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">2. Transaction</p>
+                )}
+                {p.tag === '4A' && (
+                  <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">4. Receipt Objects</p>
                 )}
                 <a
                   href={`#${p.id}`}

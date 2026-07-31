@@ -13,6 +13,7 @@
  * `ReceiptObject` renders any domain from a ReceiptContent config; the
  * exported `ReceiptCard` keeps the reservation flow's slot-driven usage.
  */
+import { Squircle } from '@squircle-js/react'
 import { motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import { PROVIDERS } from './data'
@@ -60,12 +61,19 @@ export function ReceiptObject({ content }: { content: ReceiptContent }) {
         transition: { duration: 0.55, ease: EASE },
       }}
       exit={{ opacity: 0, scale: 0.96, filter: 'blur(8px)', transition: { duration: 0.2 } }}
-      className="overflow-hidden rounded-[26px] px-5 pt-4.5 pb-5 shadow-[0_24px_50px_-22px_rgba(14,12,17,0.55)]"
-      style={{
-        background:
-          'radial-gradient(130% 120% at 28% 0%, #262130 0%, #17141b 58%, #0e0c11 100%)',
-      }}
     >
+      {/* Squircle clipping swallows box-shadow, so the shadow rides a
+          drop-shadow wrapper and follows the smoothed silhouette. */}
+      <div style={{ filter: 'drop-shadow(0 18px 28px rgba(14,12,17,0.32))' }}>
+        <Squircle
+          cornerRadius={26}
+          cornerSmoothing={1}
+          className="overflow-hidden px-5 pt-4.5 pb-5"
+          style={{
+            background:
+              'radial-gradient(130% 120% at 28% 0%, #262130 0%, #17141b 58%, #0e0c11 100%)',
+          }}
+        >
       {/* Provider + reference */}
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-2.5">
@@ -143,6 +151,8 @@ export function ReceiptObject({ content }: { content: ReceiptContent }) {
           </span>
           <span className="truncate text-white/45">{content.next}</span>
         </div>
+      </div>
+        </Squircle>
       </div>
     </motion.div>
   )
