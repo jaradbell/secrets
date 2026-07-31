@@ -3,6 +3,7 @@ import { MobileAppShell } from '../components/shell/MobileAppShell'
 import { RECEIPT_DOCK_SUGGESTIONS } from '../components/receipt/dockSuggestions'
 import { ReservationReceipt as ReceiptReservationReceipt } from '../components/receipt/ReservationReceipt'
 import { TransactionView as ReceiptTransactionView } from '../components/receipt/TransactionView'
+import { ReceiptGallery } from '../components/transaction/ReceiptGallery'
 import { ReservationProvider } from '../components/transaction/reservationFlow'
 import { TransactionView } from '../components/transaction/TransactionView'
 import { EmptyState } from '../components/voice/EmptyState'
@@ -92,6 +93,14 @@ const PROTOTYPES: {
         />
       </ReservationProvider>
     ),
+  },
+  {
+    // Design study: the in-thread receipt card generalized across domains.
+    id: 'receipt-objects',
+    tag: '4',
+    label: 'Receipt Objects',
+    ambient: 'composer',
+    render: () => <ReceiptGallery />,
   },
 ]
 
