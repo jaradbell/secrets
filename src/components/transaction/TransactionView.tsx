@@ -17,6 +17,7 @@ import { PROVIDERS, PROVIDER_RESULTS, type ProviderId, type RankedResult } from 
 import { InlineConfirmCard } from './InlineConfirmCard'
 import { PlaceCardStack } from './PlaceCardStack'
 import { PlaceDetailsView, type MorphOrigin } from './PlaceDetailsView'
+import { ReceiptCard } from './ReceiptCard'
 import { useReservationFlow } from './reservationFlow'
 
 export type TransactionVariant = '2a' | '2c' | '2d'
@@ -83,10 +84,14 @@ export function TransactionView({ variant = '2a' }: { variant?: TransactionVaria
   const confirming = stage === 'followUp' || stage === 'booking'
   // 2C: the original assistant turn rewrites itself — no second message.
   const bookingTurn = variant === '2c' && confirming
+  // All variants: once booked, the turn resolves to confirmation + receipt.
+  const receiptTurn = stage === 'receipt'
 
   // Close details the moment 2C's follow-up begins; booking lives in-thread.
+  // And when any variant's booking lands, close whatever overlay carried it —
+  // the confirmed thread is the destination.
   useEffect(() => {
-    if (variant === '2c' && stage === 'followUp') setSelected(null)
+    if ((variant === '2c' && stage === 'followUp') || stage === 'receipt') setSelected(null)
   }, [variant, stage])
 
   const [viewport, setViewport] = useState<HTMLElement | null>(null)
@@ -137,14 +142,22 @@ export function TransactionView({ variant = '2a' }: { variant?: TransactionVaria
       <div className="mt-2.5 flex flex-col gap-3.5">
         <AnimatePresence mode="wait" initial={false}>
           <motion.p
-            key={bookingTurn ? 'reserve' : 'pick'}
+            key={receiptTurn ? 'confirmed' : bookingTurn ? 'reserve' : 'pick'}
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -3 }}
             transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
             className="text-[14px] leading-relaxed text-ink"
           >
-            {bookingTurn ? (
+            {receiptTurn && flow ? (
+              <>
+                You&rsquo;re all set —{' '}
+                <span className="font-semibold">{flow.place ?? 'Valette Restaurant'}</span> is
+                booked for {flow.slots.date?.split(',')[0] ?? 'Saturday'} at{' '}
+                {flow.slots.time ?? '7:30 PM'}, party of {flow.slots.party ?? 2}. OpenTable sent
+                the confirmation to your email.
+              </>
+            ) : bookingTurn ? (
               <>Here&rsquo;s your reservation — confirm the details and I&rsquo;ll book it.</>
             ) : (
               <>
@@ -157,7 +170,17 @@ export function TransactionView({ variant = '2a' }: { variant?: TransactionVaria
         </AnimatePresence>
 
         <AnimatePresence mode="wait" initial={false}>
-          {bookingTurn ? (
+          {receiptTurn && flow ? (
+            <motion.div
+              key="receipt"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, transition: { duration: 0.18 } }}
+              className="mt-1"
+            >
+              <ReceiptCard place={flow.place ?? 'Valette Restaurant'} slots={flow.slots} />
+            </motion.div>
+          ) : bookingTurn ? (
             <motion.div
               key="booking"
               initial={{ opacity: 0, y: 10 }}

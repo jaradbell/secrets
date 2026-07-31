@@ -187,7 +187,10 @@ export function VoiceControl({
 }: {
   idleContent?: ReactNode
   followUp?: FollowUpMode
-  receipt?: ComponentType<{ place: string; slots: ReservationSlots; onDone: () => void }>
+  /** Full-screen surface for the completed transaction. Pass null to skip
+      the takeover entirely — the prototype's own content renders the receipt
+      in place (e.g. the in-thread receipt card) and the dock stays live. */
+  receipt?: ComponentType<{ place: string; slots: ReservationSlots; onDone: () => void }> | null
   /** Drop the resting "Hold or tap to speak" hint while a details sheet has
       focus (the sheet's own affordances carry the moment). */
   hideHintWhenFocused?: boolean
@@ -202,13 +205,15 @@ export function VoiceControl({
 
   const flow = useReservationFlow()
   const stage = flow?.stage ?? 'none'
+  // Without a takeover surface, the receipt lives in the content and the
+  // dock carries on — no bloom-out, pill resolves back to the orb.
+  const receiptTakeover = stage === 'receipt' && Receipt !== null
   // Dock shape per mode. 'pill' morphs the orb into the slot pill (and stays
-  // pill through booking/receipt so the dock blurs out without snapping
-  // back). 'none' keeps the orb throughout — the confirmation UI lives out
-  // in the content.
+  // pill through booking/receipt-takeover so the dock blurs out without
+  // snapping back). 'none' keeps the orb throughout — the confirmation UI
+  // lives out in the content.
   const isPill =
-    followUp === 'pill' &&
-    (stage === 'followUp' || stage === 'booking' || stage === 'receipt')
+    followUp === 'pill' && (stage === 'followUp' || stage === 'booking' || receiptTakeover)
   // Both slots filled during follow-up: don't auto-book — surface the
   // explicit "go" and wait for it.
   const ready = stage === 'followUp' && !!flow?.slots.time && !!flow?.slots.party
@@ -485,7 +490,7 @@ export function VoiceControl({
         ref={dockRef}
         className="relative z-40 flex flex-col items-center gap-4"
         animate={
-          stage === 'receipt'
+          receiptTakeover
             ? {
                 opacity: [1, 1, 0],
                 scale: [1, 1.16, 1.38],
@@ -494,11 +499,11 @@ export function VoiceControl({
             : { opacity: 1, scale: 1, filter: 'blur(0px)' }
         }
         transition={
-          stage === 'receipt'
+          receiptTakeover
             ? { duration: 1.0, times: [0, 0.5, 1], ease: 'easeInOut' }
             : { duration: 0.35, ease: [0.4, 0, 0.2, 1] }
         }
-        style={{ pointerEvents: stage === 'receipt' ? 'none' : 'auto' }}
+        style={{ pointerEvents: receiptTakeover ? 'none' : 'auto' }}
       >
         {/* Slot popovers — spring up from the pill (2A). */}
         <AnimatePresence>
@@ -797,7 +802,7 @@ export function VoiceControl({
 
       {/* Transaction completed — black fades in behind the blurred-out pill. */}
       <AnimatePresence>
-        {stage === 'receipt' && flow && (
+        {receiptTakeover && Receipt && flow && (
           <Receipt
             place={flow.place ?? 'Valette Restaurant'}
             slots={flow.slots}

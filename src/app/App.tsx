@@ -37,7 +37,11 @@ const PROTOTYPES: {
     ambient: 'composer',
     render: () => (
       <ReservationProvider>
-        <VoiceControl followUp="pill" idleContent={<TransactionView variant="2a" />} />
+        <VoiceControl
+          followUp="pill"
+          receipt={null}
+          idleContent={<TransactionView variant="2a" />}
+        />
       </ReservationProvider>
     ),
   },
@@ -48,7 +52,11 @@ const PROTOTYPES: {
     ambient: 'composer',
     render: () => (
       <ReservationProvider>
-        <VoiceControl followUp="none" idleContent={<TransactionView variant="2c" />} />
+        <VoiceControl
+          followUp="none"
+          receipt={null}
+          idleContent={<TransactionView variant="2c" />}
+        />
       </ReservationProvider>
     ),
   },
@@ -59,7 +67,11 @@ const PROTOTYPES: {
     ambient: 'composer',
     render: () => (
       <ReservationProvider>
-        <VoiceControl followUp="none" idleContent={<TransactionView variant="2d" />} />
+        <VoiceControl
+          followUp="none"
+          receipt={null}
+          idleContent={<TransactionView variant="2d" />}
+        />
       </ReservationProvider>
     ),
   },
