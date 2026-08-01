@@ -6,6 +6,8 @@ import { TransactionView as ReceiptTransactionView } from '../components/receipt
 import { ReceiptGallery } from '../components/transaction/ReceiptGallery'
 import { ReceiptGalleryConversation } from '../components/transaction/ReceiptGalleryConversation'
 import { ReceiptGalleryExpressive } from '../components/transaction/ReceiptGalleryExpressive'
+import { ReceiptGalleryTicket } from '../components/transaction/ReceiptGalleryTicket'
+import { ReceiptGalleryWallet } from '../components/transaction/ReceiptGalleryWallet'
 import { ReservationProvider } from '../components/transaction/reservationFlow'
 import { TransactionView } from '../components/transaction/TransactionView'
 import { EmptyState } from '../components/voice/EmptyState'
@@ -118,6 +120,20 @@ const PROTOTYPES: {
     label: 'In Conversation',
     ambient: 'composer',
     render: () => <ReceiptGalleryConversation />,
+  },
+  {
+    id: 'receipt-objects-4d',
+    tag: '4D',
+    label: 'Wallet',
+    ambient: 'composer',
+    render: () => <ReceiptGalleryWallet />,
+  },
+  {
+    id: 'receipt-objects-4e',
+    tag: '4E',
+    label: 'Ticket',
+    ambient: 'composer',
+    render: () => <ReceiptGalleryTicket />,
   },
 ]
 
