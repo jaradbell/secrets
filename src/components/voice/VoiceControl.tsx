@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 
 import { ReservationReceipt } from '../transaction/ReservationReceipt'
 import { useReservationFlow, type ReservationSlots } from '../transaction/reservationFlow'
 import { auraBus } from '../shared/auraBus'
+import { tripFileBus, useTripFileOpen } from '../shared/tripFileBus'
 import { EdgeAura } from './EdgeAura'
 import { LiquidDistortion } from './LiquidDistortion'
 import { useVoiceInput, type VoiceStatus } from './useVoiceInput'
@@ -205,6 +206,9 @@ export function VoiceControl({
 
   const flow = useReservationFlow()
   const stage = flow?.stage ?? 'none'
+  // Trip file open (header island tapped): the orb becomes the close
+  // affordance — a quiet dark X disc — and voice input stands down.
+  const tripOpen = useTripFileOpen()
   // Without a takeover surface, the receipt lives in the content and the
   // dock carries on — no bloom-out, pill resolves back to the orb.
   const receiptTakeover = stage === 'receipt' && Receipt !== null
@@ -290,6 +294,7 @@ export function VoiceControl({
   const inlinePressRef = useRef<{ timer: number; held: boolean } | null>(null)
 
   const onPointerDown = () => {
+    if (tripOpen) return // the X handles the press on release
     if (stage === 'booking') return // mid-transaction; let it complete
     if (inline) {
       if (status !== 'idle') return
@@ -338,6 +343,10 @@ export function VoiceControl({
   }
 
   const onPointerUp = () => {
+    if (tripOpen) {
+      tripFileBus.close()
+      return
+    }
     setPressing(false)
     const inlinePress = inlinePressRef.current
     if (inlinePress) {
@@ -424,7 +433,9 @@ export function VoiceControl({
     return () => clearTimeout(timer)
   }, [followUpPrompt])
 
-  const dockText = promptShowing && followUpPrompt ? followUpPrompt : label
+  // While the trip file is up the fan carries its own captions — the dock
+  // goes quiet (NBSP keeps the slot's height so the button doesn't shift).
+  const dockText = tripOpen ? '\u00A0' : promptShowing && followUpPrompt ? followUpPrompt : label
 
   return (
     // No z-index on the root: the dock below carries its own high z so it
@@ -572,7 +583,7 @@ export function VoiceControl({
           onPointerDown={onPointerDown}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerCancel}
-          aria-label={label.trim() || 'Voice input'}
+          aria-label={tripOpen ? 'Close receipts' : label.trim() || 'Voice input'}
           aria-expanded={inline ? expanded : undefined}
           className="relative flex shrink-0 items-center justify-center overflow-hidden outline-none touch-none select-none"
           // Capsule: never animate radius — an over-large value clamps to
@@ -598,6 +609,15 @@ export function VoiceControl({
             style={{ borderRadius: 'inherit' }}
           >
             <VoiceOrb status={status} levelRef={levelRef} size="fill" />
+            {/* Trip file: the orb's living material settles under a quiet
+                dark disc — the close control shouldn't feel like a mic. */}
+            <motion.div
+              className="absolute inset-0"
+              style={{ borderRadius: 'inherit', background: '#17141b' }}
+              initial={false}
+              animate={{ opacity: tripOpen ? 1 : 0 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+            />
           </div>
 
           {isPill && flow ? (
@@ -669,7 +689,41 @@ export function VoiceControl({
                pill carries its name beside the dots; the label melts away
                as the pill condenses to a disc. */
             <span className="pointer-events-none relative flex items-center gap-2">
-              <VoiceGlyph status={status} levelRef={levelRef} size={inline ? 22 : 30} />
+              {/* Dots ↔ X: the verb swaps to the close glyph while the trip
+                  file is up, with a quarter-turn so the change reads. */}
+              <span className="relative flex items-center justify-center">
+                <motion.span
+                  className="flex items-center"
+                  initial={false}
+                  animate={{
+                    opacity: tripOpen ? 0 : 1,
+                    rotate: tripOpen ? 90 : 0,
+                    scale: tripOpen ? 0.5 : 1,
+                  }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                >
+                  <VoiceGlyph status={status} levelRef={levelRef} size={inline ? 22 : 30} />
+                </motion.span>
+                <motion.span
+                  className="absolute inset-0 flex items-center justify-center"
+                  initial={false}
+                  animate={{
+                    opacity: tripOpen ? 1 : 0,
+                    rotate: tripOpen ? 0 : -90,
+                    scale: tripOpen ? 1 : 0.5,
+                  }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                    <path
+                      d="M4 4 14 14M14 4 4 14"
+                      stroke="rgba(255,255,255,0.9)"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </motion.span>
+              </span>
               <AnimatePresence initial={false}>
                 {inline && !expanded && (
                   <motion.span

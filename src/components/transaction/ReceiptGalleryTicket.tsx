@@ -19,18 +19,20 @@ function Ticket({
   style,
   children,
 }: {
+  /** Gallery stagger position; pass -1 to skip the self-entrance entirely
+      (the trip file fan choreographs its own deal-up). */
   index: number
   style: CSSProperties
   children: ReactNode
 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 18, scale: 0.95 }}
+      initial={index < 0 ? false : { opacity: 0, y: 18, scale: 0.95 }}
       animate={{
         opacity: 1,
         y: 0,
         scale: 1,
-        transition: { delay: 0.08 * index, duration: 0.5, ease: EASE },
+        transition: { delay: 0.08 * Math.max(0, index), duration: 0.5, ease: EASE },
       }}
     >
       <div style={{ filter: 'drop-shadow(0 18px 30px rgba(14,12,17,0.3))' }}>
@@ -164,7 +166,7 @@ function Barcode({ seed, color }: { seed: string; color: string }) {
 /* ── The tickets ──────────────────────────────────────────────────────── */
 
 /** Flight — the stacked-route boarding pass: SFO over EWR, giant. */
-function FlightTicket({ index }: { index: number }) {
+export function FlightTicket({ index }: { index: number }) {
   return (
     <Ticket
       index={index}
@@ -231,7 +233,7 @@ function FlightTicket({ index }: { index: number }) {
 }
 
 /** Dining — photo hero with display type, tearing into a dark red stub. */
-function DiningTicket({ index }: { index: number }) {
+export function DiningTicket({ index }: { index: number }) {
   return (
     <Ticket
       index={index}
@@ -309,7 +311,7 @@ function DestinationSquare() {
 
 /** Ride — pickup schedule up top, the app's own itinerary list as the
     centerpiece, driver at the curb. Nothing else. */
-function RideTicket({ index }: { index: number }) {
+export function RideTicket({ index }: { index: number }) {
   return (
     <Ticket index={index} style={{ background: '#0B0B0B' }}>
       <div className="flex items-center justify-between px-6 pt-5">
@@ -384,7 +386,7 @@ function RideTicket({ index }: { index: number }) {
 
 /** Hotel — the kept element: photo hero, oval date badge, paper stub,
     barcode. Bold sans now, Expedia by logo. */
-function HotelTicket({ index }: { index: number }) {
+export function HotelTicket({ index }: { index: number }) {
   const ink = '#232A36'
   return (
     <Ticket index={index} style={{ background: '#C9CFDA' }}>
@@ -434,7 +436,7 @@ function HotelTicket({ index }: { index: number }) {
 }
 
 /** Tickets — team-color mono field, giant matchup type, stub grid. */
-function GameTicket({ index }: { index: number }) {
+export function GameTicket({ index }: { index: number }) {
   const gold = '#FDB927'
   return (
     <Ticket index={index} style={{ background: '#1D428A' }}>

@@ -23,7 +23,14 @@ function GlyphButton({ label, children }: { label: string; children: ReactNode }
   )
 }
 
-export function ConversationHeader({ title }: { title: string }) {
+export function ConversationHeader({
+  title,
+  onIslandTap,
+}: {
+  title: string
+  /** Tapping the island opens the conversation's collected receipts. */
+  onIslandTap?: () => void
+}) {
   return (
     <div
       className="absolute inset-x-0 top-0 z-20 grid grid-cols-[1fr_auto_1fr] items-center px-4"
@@ -59,6 +66,7 @@ export function ConversationHeader({ title }: { title: string }) {
       <button
         type="button"
         aria-label={`Conversation: ${title}`}
+        onClick={onIslandTap}
         className="flex items-center gap-0.5 rounded-[24px] border border-white bg-[rgba(250,250,250,0.7)] py-[9px] pr-2 pl-3 shadow-[0px_2px_40px_0px_rgba(0,0,0,0.1)] outline-none backdrop-blur-[12px] transition-transform duration-200 ease-out active:scale-[0.97]"
       >
         <span className="w-[136px] overflow-hidden text-left text-[12px] font-medium tracking-[0.12px] text-ellipsis whitespace-nowrap text-[#171717]">

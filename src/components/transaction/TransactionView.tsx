@@ -19,6 +19,8 @@ import { PlaceCardStack } from './PlaceCardStack'
 import { PlaceDetailsView, type MorphOrigin } from './PlaceDetailsView'
 import { ReceiptCard } from './ReceiptCard'
 import { useReservationFlow } from './reservationFlow'
+import { tripFileBus, useTripFileOpen } from '../shared/tripFileBus'
+import { TripFile } from './TripFile'
 
 export type TransactionVariant = '2a' | '2c' | '2d'
 
@@ -98,6 +100,11 @@ export function TransactionView({ variant = '2a' }: { variant?: TransactionVaria
   useEffect(() => {
     setViewport(document.getElementById('app-viewport'))
   }, [])
+
+  // Trip file — the island's receipts view. Close it when this prototype
+  // unmounts so the flag never leaks into the next one.
+  const tripOpen = useTripFileOpen()
+  useEffect(() => () => tripFileBus.close(), [])
 
   const openDetails = (result: RankedResult) => {
     const card = document.querySelector(`[data-place-card="${result.place.id}"]`)
@@ -232,7 +239,25 @@ export function TransactionView({ variant = '2a' }: { variant?: TransactionVaria
         </AnimatePresence>
       </div>
 
-      {viewport && createPortal(<ConversationHeader title="Sisters Birthday Weekend" />, viewport)}
+      {viewport &&
+        createPortal(
+          <ConversationHeader
+            title="Sisters Birthday Weekend"
+            onIslandTap={() => tripFileBus.open()}
+          />,
+          viewport,
+        )}
+
+      {/* Trip file — the fan of this conversation's receipts, over the
+          blurred thread. Above the header (z-20), below the dock (z-40) so
+          the orb-turned-X stays live. */}
+      {viewport &&
+        createPortal(
+          <AnimatePresence>
+            {tripOpen && <TripFile onClose={() => tripFileBus.close()} />}
+          </AnimatePresence>,
+          viewport,
+        )}
 
       {viewport &&
         createPortal(
