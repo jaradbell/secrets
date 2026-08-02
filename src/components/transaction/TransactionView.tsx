@@ -9,7 +9,7 @@
  * 2D opens a checkout screen.
  */
 import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CheckoutView } from './CheckoutView'
 import { ConversationHeader } from './ConversationHeader'
@@ -20,9 +20,25 @@ import { PlaceDetailsView, type MorphOrigin } from './PlaceDetailsView'
 import { ReceiptCard } from './ReceiptCard'
 import { useReservationFlow } from './reservationFlow'
 import { tripFileBus, useTripFileOpen } from '../shared/tripFileBus'
-import { TripFile } from './TripFile'
+import { TripFile, type TripTask } from './TripFile'
 
 export type TransactionVariant = '2a' | '2c' | '2d'
+
+/** Assistant typing — three quiet dots while the new thread "thinks". */
+function TypingDots() {
+  return (
+    <div className="flex h-8 w-fit items-center gap-1 rounded-full bg-black/[0.06] px-3.5">
+      {[0, 1, 2].map((i) => (
+        <motion.span
+          key={i}
+          className="size-1.5 rounded-full bg-ink/40"
+          animate={{ opacity: [0.3, 1, 0.3], y: [0, -2, 0] }}
+          transition={{ duration: 1, repeat: Infinity, delay: i * 0.15, ease: 'easeInOut' }}
+        />
+      ))}
+    </div>
+  )
+}
 
 function ProviderChips({
   active,
@@ -106,6 +122,80 @@ export function TransactionView({ variant = '2a' }: { variant?: TransactionVaria
   const tripOpen = useTripFileOpen()
   useEffect(() => () => tripFileBus.close(), [])
 
+  // The trip's to-dos. State is derived, not maintained: the dinner task
+  // completes itself the moment the reservation flow produces a receipt.
+  const tasks = useMemo<TripTask[]>(() => {
+    const opentable = PROVIDERS.find((p) => p.id === 'opentable')!
+    return [
+      {
+        id: 'flights',
+        label: 'Book flights to SFO',
+        state: 'done',
+        receiptId: 'flight',
+        provider: { name: 'United', icon: '/providers/united.png' },
+      },
+      {
+        id: 'hotel',
+        label: 'Reserve a hotel',
+        state: 'done',
+        receiptId: 'hotel',
+        provider: { name: 'Expedia', icon: '/providers/expedia.png' },
+      },
+      stage === 'receipt'
+        ? {
+            id: 'dinner',
+            label: 'Book the birthday dinner',
+            state: 'done' as const,
+            receiptId: 'dining',
+            provider: { name: 'OpenTable', icon: opentable.icon },
+          }
+        : {
+            id: 'dinner',
+            label: 'Book the birthday dinner',
+            state: 'active' as const,
+          },
+      {
+        id: 'cake',
+        label: 'Order a birthday cake',
+        state: 'todo',
+        seed: 'Order a birthday cake for Saturday',
+      },
+    ]
+  }, [stage])
+
+  // Tapping the in-flight task lands you back on its turn: the file tucks
+  // down, and once the thread has un-blurred the turn pulses to catch the
+  // eye. Timers ride a ref so a quick re-open doesn't strand a highlight.
+  const [highlightTurn, setHighlightTurn] = useState(false)
+  const highlightTimers = useRef<number[]>([])
+  useEffect(() => () => highlightTimers.current.forEach(clearTimeout), [])
+  const jumpToDinnerTurn = () => {
+    tripFileBus.close()
+    highlightTimers.current.forEach(clearTimeout)
+    highlightTimers.current = [
+      window.setTimeout(() => setHighlightTurn(true), 450),
+      window.setTimeout(() => setHighlightTurn(false), 2600),
+    ]
+  }
+
+  // Tapping an untouched task spawns a new thread in the project: the main
+  // exchange gives way to a seeded user turn, the assistant types, then a
+  // first reply lands. The breadcrumb returns to the weekend thread.
+  const [sideThread, setSideThread] = useState<{ seed: string } | null>(null)
+  const [sideReply, setSideReply] = useState(false)
+  useEffect(() => {
+    if (!sideThread) {
+      setSideReply(false)
+      return
+    }
+    const t = window.setTimeout(() => setSideReply(true), 1900)
+    return () => clearTimeout(t)
+  }, [sideThread])
+  const startCakeThread = (task: TripTask) => {
+    tripFileBus.close()
+    if (task.seed) setSideThread({ seed: task.seed })
+  }
+
   const openDetails = (result: RankedResult) => {
     const card = document.querySelector(`[data-place-card="${result.place.id}"]`)
     const thumb = document.querySelector(`[data-place-thumb="${result.place.id}"]`)
@@ -135,6 +225,79 @@ export function TransactionView({ variant = '2a' }: { variant?: TransactionVaria
 
   return (
     <div className="flex w-full flex-col self-stretch justify-start pt-[84px]">
+      <AnimatePresence mode="wait" initial={false}>
+      {sideThread ? (
+        /* A new thread in the project — spawned from an untouched to-do in
+           the trip file. Seeded user turn, assistant types, first reply
+           lands; the breadcrumb returns to the weekend thread. */
+        <motion.div
+          key="side-thread"
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+          className="flex flex-col"
+        >
+          <button
+            type="button"
+            onClick={() => setSideThread(null)}
+            className="mb-4 flex items-center gap-1.5 self-start text-[12px] font-medium text-ink-tertiary outline-none transition-colors duration-150 active:text-ink"
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="m15 5-7 7 7 7"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            Sisters Birthday Weekend
+          </button>
+
+          <div className="flex flex-col items-end">
+            <div className="max-w-[80%] rounded-[18px] rounded-br-[6px] bg-ink px-4 py-2.5 text-[13px] leading-snug text-white">
+              {sideThread.seed}
+            </div>
+            <p className="mt-1.5 pr-1 text-[11px] text-ink-tertiary">just now</p>
+          </div>
+
+          <div className="mt-2.5">
+            <AnimatePresence mode="wait" initial={false}>
+              {sideReply ? (
+                <motion.p
+                  key="reply"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+                  className="text-[14px] leading-relaxed text-ink"
+                >
+                  On it — looking at bakeries near Healdsburg that can do a Saturday pickup.
+                  Does she have a favorite flavor?
+                </motion.p>
+              ) : (
+                <motion.div
+                  key="typing"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0, transition: { duration: 0.15 } }}
+                  transition={{ duration: 0.25 }}
+                >
+                  <TypingDots />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </motion.div>
+      ) : (
+      <motion.div
+        key="main-thread"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -8 }}
+        transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+        className="flex flex-col"
+      >
       {/* User turn */}
       <div className="flex flex-col items-end">
         <div className="max-w-[80%] rounded-[18px] rounded-br-[6px] bg-ink px-4 py-2.5 text-[13px] leading-snug text-white">
@@ -145,8 +308,18 @@ export function TransactionView({ variant = '2a' }: { variant?: TransactionVaria
 
       {/* Assistant turn — one object. In 2C, booking rewrites this turn:
           prose updates, chips leave, stack becomes the reservation module.
-          X on the place row dismisses back to this pick state. */}
-      <div className="mt-2.5 flex flex-col gap-3.5">
+          X on the place row dismisses back to this pick state. A wash pulses
+          over the whole turn when the trip file lands you here. */}
+      <motion.div
+        className="-mx-2 mt-2.5 flex flex-col gap-3.5 rounded-[20px] px-2"
+        initial={false}
+        animate={
+          highlightTurn
+            ? { backgroundColor: ['rgba(147,124,224,0.16)', 'rgba(147,124,224,0)'] }
+            : { backgroundColor: 'rgba(147,124,224,0)' }
+        }
+        transition={{ duration: 1.9, ease: 'easeOut' }}
+      >
         <AnimatePresence mode="wait" initial={false}>
           <motion.p
             key={receiptTurn ? 'confirmed' : bookingTurn ? 'reserve' : 'pick'}
@@ -237,7 +410,10 @@ export function TransactionView({ variant = '2a' }: { variant?: TransactionVaria
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </motion.div>
+      </motion.div>
+      )}
+      </AnimatePresence>
 
       {viewport &&
         createPortal(
@@ -248,13 +424,20 @@ export function TransactionView({ variant = '2a' }: { variant?: TransactionVaria
           viewport,
         )}
 
-      {/* Trip file — the fan of this conversation's receipts, over the
-          blurred thread. Above the header (z-20), below the dock (z-40) so
-          the orb-turned-X stays live. */}
+      {/* Trip file — receipts fanned + tasks listed over the blurred thread.
+          Above the header (z-20), below the dock (z-40) so the orb-turned-X
+          stays live. */}
       {viewport &&
         createPortal(
           <AnimatePresence>
-            {tripOpen && <TripFile onClose={() => tripFileBus.close()} />}
+            {tripOpen && (
+              <TripFile
+                tasks={tasks}
+                onJumpToThread={jumpToDinnerTurn}
+                onStartThread={startCakeThread}
+                onClose={() => tripFileBus.close()}
+              />
+            )}
           </AnimatePresence>,
           viewport,
         )}
