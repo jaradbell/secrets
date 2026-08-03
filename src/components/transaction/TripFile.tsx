@@ -54,6 +54,20 @@ export type TripTask = {
 type Deck = 'receipts' | 'tasks'
 const DECKS: Deck[] = ['receipts', 'tasks']
 
+/** Backdrop keyframes. The Safari-prefixed filter isn't in framer's target
+    types (it animates fine at runtime); consts skip the literal-only excess
+    property check that fails `tsc -b`. */
+const BACKDROP_HIDDEN = {
+  backdropFilter: 'blur(0px)',
+  WebkitBackdropFilter: 'blur(0px)',
+  backgroundColor: 'rgba(252,252,252,0)',
+}
+const BACKDROP_SHOWN = {
+  backdropFilter: 'blur(18px)',
+  WebkitBackdropFilter: 'blur(18px)',
+  backgroundColor: 'rgba(252,252,252,0.45)',
+}
+
 /** Swipe distance / fling velocity that advances the fan or flips decks. */
 const SWIPE_OFFSET = 50
 const SWIPE_VELOCITY = 400
@@ -143,22 +157,9 @@ export function TripFile({
           develops in. Tap to dismiss. */}
       <motion.div
         className="absolute inset-0"
-        initial={{
-          backdropFilter: 'blur(0px)',
-          WebkitBackdropFilter: 'blur(0px)',
-          backgroundColor: 'rgba(252,252,252,0)',
-        }}
-        animate={{
-          backdropFilter: 'blur(18px)',
-          WebkitBackdropFilter: 'blur(18px)',
-          backgroundColor: 'rgba(252,252,252,0.45)',
-        }}
-        exit={{
-          backdropFilter: 'blur(0px)',
-          WebkitBackdropFilter: 'blur(0px)',
-          backgroundColor: 'rgba(252,252,252,0)',
-          transition: { duration: 0.38, ease: 'easeIn' },
-        }}
+        initial={BACKDROP_HIDDEN}
+        animate={BACKDROP_SHOWN}
+        exit={{ ...BACKDROP_HIDDEN, transition: { duration: 0.38, ease: 'easeIn' } }}
         transition={{ duration: 0.65, ease: EASE }}
         onClick={onClose}
       />
