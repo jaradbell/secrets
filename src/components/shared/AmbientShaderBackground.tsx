@@ -38,7 +38,7 @@ uniform vec4 u_finish;     // hue, vignette, blur, grain
 uniform vec4 u_transform;  // seed, rotation, drift, OKLab toggle
 uniform vec4 u_space;      // offset.xy, pointer.xy
 uniform vec4 u_cursor;
-uniform vec4 u_aura;       // voice parting 0..1, rest unused
+uniform vec4 u_aura;       // voice parting 0..1, focus point.xy, focus amount
 
 #define u_resolution u_scene.xy
 #define u_time u_scene.z
@@ -71,6 +71,8 @@ uniform vec4 u_aura;       // voice parting 0..1, rest unused
 #define u_cursorStrength u_cursor.z
 #define u_cursorRadius u_cursor.w
 #define u_part u_aura.x
+#define u_focusPoint u_aura.yz
+#define u_focusAmt u_aura.w
 
 float hash21(vec2 p) {
 #ifndef GL_FRAGMENT_PRECISION_HIGH
@@ -190,6 +192,14 @@ vec3 hueRotate(vec3 col, float a) {
 }
 
 vec3 shade(vec2 uv, vec2 p, float t) {
+  // Focus gathering: the focus point expressed in the same field space as
+  // the bloom centers (aspect-corrected, scaled). At full focus amount the
+  // colour blooms migrate onto a tight ring around it — each keeps its own
+  // (slowly drifting) angle so the hues stay distinct and swirl around the
+  // point instead of collapsing into a single muddy average — while the
+  // rest of the field drains toward the white base.
+  vec2 fp = ((u_focusPoint - 0.5) * u_resolution.xy)
+    / min(u_resolution.x, u_resolution.y) * u_scale;
   vec3 acc = u_colors[0] * 0.15;
   float total = 0.15;
   for (int i = 0; i < 8; i++) {
@@ -198,7 +208,21 @@ vec3 shade(vec2 uv, vec2 p, float t) {
     vec2 c = vec2(
       sin(t * (0.21 + fi * 0.071) + fi * 2.4 + u_seed),
       cos(t * (0.17 + fi * 0.093) + fi * 1.7)) * (0.45 + u_intensity * 0.35);
-    float w = exp(-dot(p - c, p - c) * 6.0);
+    float sharp = 6.0;
+    if (u_focusAmt > 0.001) {
+      vec2 rel = c - fp;
+      float d = length(rel);
+      float gathered = mix(d, 0.025 + d * 0.04, u_focusAmt);
+      c = fp + rel * (gathered / max(d, 0.0001));
+      // Tighten the blooms as they gather — the pool ends up barely larger
+      // than the loader that sits on it, hues peeking out around the ink.
+      // The breath lives here (size only): modulating the gather amount
+      // instead would slide the blooms away from the point every trough.
+      // u_time runs at 0.73× real seconds; 3.91 ≈ one swell per two beats.
+      sharp = mix(6.0, 220.0, u_focusAmt)
+        * (1.0 + 0.18 * sin(u_time * 3.91));
+    }
+    float w = exp(-dot(p - c, p - c) * sharp);
     acc += u_colors[i] * w;
     total += w;
   }
@@ -327,8 +351,23 @@ function compileShader(
  * devicePixelRatio at 2, pauses when the tab is hidden, and holds a static
  * frame under prefers-reduced-motion.
  */
-export function AmbientShaderBackground({ veil = true }: { veil?: boolean }) {
+export function AmbientShaderBackground({
+  veil = true,
+  focus,
+}: {
+  veil?: boolean
+  /** Gathers the mesh around a point: the colour blooms migrate toward it
+      in the shader, pooling there while the rest of the field drains
+      toward white — used to focus the gradient around a working element
+      (the goo loader). Fractions of the frame from the top-left, e.g.
+      `{ x: 0.5, y: 0.5 }`. Strength eases in/out on mount/unmount and
+      breathes slowly while held. */
+  focus?: { x: number; y: number }
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  // Read per-frame inside the render loop without re-running the GL setup.
+  const focusRef = useRef(focus)
+  focusRef.current = focus
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -437,6 +476,9 @@ export function AmbientShaderBackground({ veil = true }: { veil?: boolean }) {
     // Voice-aura parting, eased toward the shared flag each frame — quick
     // suck outward on press, gentler flow back on release.
     let part = 0
+    // Focus gathering, eased the same way so the gradient visibly arrives
+    // when work starts and relaxes when it ends.
+    let focusAmt = 0
 
     const draw = (seconds: number) => {
       // u_scene = vec4(width, height, seconds * 0.73, colorCount)
@@ -450,7 +492,15 @@ export function AmbientShaderBackground({ veil = true }: { veil?: boolean }) {
       last = now
       const target = auraBus.active ? 1 : 0
       part += (target - part) * (1 - Math.exp(-dt * (target > part ? 5 : 3)))
-      gl.uniform4f(uAura, part, 0.0, 0.0, 0.0)
+      const focus = focusRef.current
+      focusAmt += ((focus ? 1 : 0) - focusAmt) * (1 - Math.exp(-dt * 2.2))
+      gl.uniform4f(
+        uAura,
+        part,
+        focus ? focus.x : 0.5,
+        focus ? 1 - focus.y : 0.5, // gl_FragCoord's origin is bottom-left
+        focusAmt,
+      )
       draw(elapsed / 1000)
       raf = requestAnimationFrame(frameLoop)
     }
@@ -469,6 +519,8 @@ export function AmbientShaderBackground({ veil = true }: { veil?: boolean }) {
     document.addEventListener('visibilitychange', onVisibility)
 
     if (reducedMotion) {
+      const focus = focusRef.current
+      if (focus) gl.uniform4f(uAura, 0.0, focus.x, 1 - focus.y, 0.9)
       draw(10.0) // single static frame
     } else {
       raf = requestAnimationFrame(frameLoop)

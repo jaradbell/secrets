@@ -24,17 +24,51 @@ import {
   HotelTicket,
   RideTicket,
 } from './ReceiptGalleryTicket'
+import { ReceiptSheet, type SheetOrigin } from './ReceiptSheet'
 
 const EASE = [0.32, 0.72, 0, 1] as const
 
 /** The weekend's artifacts, in trip order. index -1 mutes the tickets' own
-    gallery entrance — the fan deals them up itself. */
+    gallery entrance — the fan deals them up itself. `meta` and `actions`
+    surface under the ticket when it's expanded to full scale. */
 const RECEIPTS = [
-  { id: 'flight', label: 'Flight · United', render: () => <FlightTicket index={-1} /> },
-  { id: 'hotel', label: 'Hotel · Expedia', render: () => <HotelTicket index={-1} /> },
-  { id: 'dining', label: 'Dinner · OpenTable', render: () => <DiningTicket index={-1} /> },
-  { id: 'ride', label: 'Ride · Uber', render: () => <RideTicket index={-1} /> },
+  {
+    id: 'flight',
+    label: 'Flight · United',
+    meta: 'United · UA 1128 · Confirmed',
+    actions: ['Check in', 'Add to Wallet'],
+    render: () => <FlightTicket index={-1} />,
+  },
+  {
+    id: 'hotel',
+    label: 'Hotel · Expedia',
+    meta: 'Expedia · EXP-99231 · Confirmed',
+    actions: ['Directions', 'Modify'],
+    render: () => <HotelTicket index={-1} />,
+  },
+  {
+    id: 'dining',
+    label: 'Dinner · OpenTable',
+    meta: 'OpenTable · VLT-8127 · Confirmed',
+    actions: ['Change time', 'Cancel'],
+    render: () => <DiningTicket index={-1} />,
+  },
+  {
+    id: 'ride',
+    label: 'Ride · Uber',
+    meta: 'Uber · UBR-88213 · En route',
+    actions: ['Track ride'],
+    render: () => <RideTicket index={-1} />,
+  },
 ]
+
+/** The fan renders tickets at this scale; expanding one inverts it so the
+    ticket settles at its natural designed size (scale 1 on screen). */
+const FAN_SCALE = 0.74
+
+/** Zoomed-in pager pitch — one full-scale card width plus a gutter, in the
+    fan wrapper's (scaled) coordinate space. */
+const PAGE_STEP = (340 + 28) / FAN_SCALE
 
 /** A to-do in the trip file. State decides the row's tap behavior:
     done → flip to its receipt; active → jump to the thread turn where it
@@ -116,6 +150,7 @@ export function TripFile({
   tasks = [],
   onJumpToThread,
   onStartThread,
+  onViewInThread,
   onClose,
 }: {
   tasks?: TripTask[]
@@ -123,10 +158,42 @@ export function TripFile({
   onJumpToThread?: (task: TripTask) => void
   /** An untouched task was tapped — close and open a new seeded thread. */
   onStartThread?: (task: TripTask) => void
+  /** "View in thread" on an expanded receipt — close and land on the turn
+      that produced it. */
+  onViewInThread?: (receiptId: string) => void
   onClose: () => void
 }) {
   const [deck, setDeck] = useState<Deck>('receipts')
   const [focused, setFocused] = useState(0)
+  // Wallet-style focus: the tapped ticket glides to center at full scale
+  // while the rest of the hand falls away. Deck flips always reset it.
+  const [expanded, setExpanded] = useState(false)
+  // Level three — the full sheet, expanding from the zoomed ticket's
+  // measured bounds. Tap the zoomed ticket to enter; drag down to leave.
+  const [sheet, setSheet] = useState<{ id: string; origin: SheetOrigin } | null>(null)
+  useEffect(() => {
+    if (deck !== 'receipts') {
+      setExpanded(false)
+      setSheet(null)
+    }
+  }, [deck])
+
+  const openSheet = (id: string) => {
+    const viewport = document.getElementById('app-viewport')
+    const ticket = document.querySelector(`[data-trip-ticket="${id}"]`)
+    if (!viewport || !ticket) return
+    const v = viewport.getBoundingClientRect()
+    const t = ticket.getBoundingClientRect()
+    setSheet({
+      id,
+      origin: {
+        top: t.top - v.top,
+        left: t.left - v.left,
+        right: v.right - t.right,
+        bottom: v.bottom - t.bottom,
+      },
+    })
+  }
 
   // The tickets deal up from the dock only on the overlay's first reveal;
   // when the fan remounts after a deck round-trip, the deck slide carries
@@ -161,7 +228,8 @@ export function TripFile({
         animate={BACKDROP_SHOWN}
         exit={{ ...BACKDROP_HIDDEN, transition: { duration: 0.38, ease: 'easeIn' } }}
         transition={{ duration: 0.65, ease: EASE }}
-        onClick={onClose}
+        // Outside taps step back one level: expanded ticket first, then out.
+        onClick={() => (expanded ? setExpanded(false) : onClose())}
       />
 
       {/* The ambient gradient pours up the frame — a full-bleed mesh revealed
@@ -170,7 +238,8 @@ export function TripFile({
         aria-hidden
         className="pointer-events-none absolute inset-0"
         initial={{ clipPath: 'inset(100% 0% 0% 0%)', opacity: 0.6 }}
-        animate={{ clipPath: 'inset(0% 0% 0% 0%)', opacity: 0.88 }}
+        // A touch more milk while a ticket holds the stage.
+        animate={{ clipPath: 'inset(0% 0% 0% 0%)', opacity: expanded ? 0.96 : 0.88 }}
         exit={{
           clipPath: 'inset(100% 0% 0% 0%)',
           opacity: 0.4,
@@ -229,9 +298,14 @@ export function TripFile({
           beneath it. */}
       <motion.div
         className="absolute right-0 z-10 h-[96px] w-[34px]"
-        style={{ top: '50%', y: '-50%' }}
+        style={{ top: '50%', y: '-50%', pointerEvents: expanded ? 'none' : 'auto' }}
         initial={{ opacity: 0, x: 16 }}
-        animate={{ opacity: 1, x: 0, transition: { delay: 0.3, duration: 0.4, ease: EASE } }}
+        animate={
+          // Deck-switching means nothing mid-focus — the notch stands down.
+          expanded
+            ? { opacity: 0, x: 16, transition: { duration: 0.25, ease: 'easeIn' } }
+            : { opacity: 1, x: 0, transition: { delay: 0.3, duration: 0.4, ease: EASE } }
+        }
         exit={{ opacity: 0, x: 16, transition: { duration: 0.18 } }}
       >
         <svg
@@ -278,7 +352,34 @@ export function TripFile({
         dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
         dragElastic={0.1}
         dragMomentum={false}
+        onTap={(e) => {
+          // Tapping the space around a zoomed ticket steps back to the fan —
+          // the drag surface sits over the backdrop, so it has to relay the
+          // outside tap itself. Taps on the ticket bubble through with the
+          // ticket in their path; leave those to the ticket's own handler.
+          if (!expanded) return
+          const target = e.target as Element | null
+          if (target?.closest?.('[data-trip-ticket]')) return
+          setExpanded(false)
+        }}
         onDragEnd={(_, info) => {
+          // Zoomed ticket keeps the surface's gestures: drag down tucks it
+          // back into the fan, horizontal swipes step between receipts
+          // without leaving the zoom. Deck flips wait until you're back out.
+          if (expanded) {
+            if (Math.abs(info.offset.y) > Math.abs(info.offset.x)) {
+              if (info.offset.y > DECK_OFFSET || info.velocity.y > DECK_VELOCITY) {
+                setExpanded(false)
+              }
+              return
+            }
+            if (info.offset.x < -SWIPE_OFFSET || info.velocity.x < -SWIPE_VELOCITY) {
+              setFocused((f) => Math.min(RECEIPTS.length - 1, f + 1))
+            } else if (info.offset.x > SWIPE_OFFSET || info.velocity.x > SWIPE_VELOCITY) {
+              setFocused((f) => Math.max(0, f - 1))
+            }
+            return
+          }
           if (Math.abs(info.offset.y) > Math.abs(info.offset.x)) {
             if (info.offset.y < -DECK_OFFSET || info.velocity.y < -DECK_VELOCITY) {
               setDeck('tasks')
@@ -350,26 +451,53 @@ export function TripFile({
                           }}
                         >
                           {/* Fan position — springs between slots on swipe/tap,
-                              never re-running the entrance. */}
+                              never re-running the entrance. Tapping the
+                              focused ticket expands it to full scale (the
+                              inverse of the fan's) while siblings fall away;
+                              tapping again tucks it back. */}
                           <motion.div
+                            data-trip-ticket={r.id}
                             onTap={() => {
-                              if (offset !== 0) setFocused(i)
+                              // The gesture stack deepens: fan tap → zoom,
+                              // zoomed tap → the full sheet. Drag-down and
+                              // backdrop taps walk back one level at a time.
+                              if (offset === 0) {
+                                if (expanded) openSheet(r.id)
+                                else setExpanded(true)
+                              } else if (!expanded) setFocused(i)
                             }}
                             initial={false}
-                            animate={{
-                              opacity: Math.abs(offset) > 2 ? 0 : offset === 0 ? 1 : 0.55,
-                              x: offset * 96,
-                              y: Math.abs(offset) * 26,
-                              scale: offset === 0 ? 1 : 0.88,
-                              rotate: offset * 7,
-                            }}
+                            animate={
+                              expanded
+                                ? // Zoomed, the hand flattens into a pager:
+                                  // every card at full scale in one row, so a
+                                  // swipe is a plain horizontal slide — no
+                                  // rotation, no dive, no scale change.
+                                  {
+                                    opacity: Math.abs(offset) > 1 ? 0 : 1,
+                                    x: offset * PAGE_STEP,
+                                    y: -10,
+                                    scale: 1 / FAN_SCALE,
+                                    rotate: 0,
+                                  }
+                                : {
+                                    opacity: Math.abs(offset) > 2 ? 0 : offset === 0 ? 1 : 0.55,
+                                    x: offset * 96,
+                                    y: Math.abs(offset) * 26,
+                                    scale: offset === 0 ? 1 : 0.88,
+                                    rotate: offset * 7,
+                                  }
+                            }
                             transition={{
                               type: 'spring',
                               stiffness: 260,
                               damping: 28,
                               opacity: { duration: 0.3 },
                             }}
-                            className={offset === 0 ? '' : 'cursor-pointer'}
+                            className="cursor-pointer"
+                            style={{
+                              pointerEvents: expanded && offset !== 0 ? 'none' : 'auto',
+                            }}
                           >
                             {r.render()}
                           </motion.div>
@@ -454,7 +582,8 @@ export function TripFile({
       </motion.div>
 
       {/* Focused label + pagination — the fan's caption slot; the tasks deck
-          carries its meaning in the rows themselves. */}
+          carries its meaning in the rows themselves. When a ticket expands,
+          the slot hands over to its meta line and action chips. */}
       <AnimatePresence initial={false}>
         {deck === 'receipts' && (
           <motion.div
@@ -469,27 +598,79 @@ export function TripFile({
             exit={{ opacity: 0, y: 8, transition: { duration: 0.2, ease: 'easeIn' } }}
           >
             <AnimatePresence mode="wait" initial={false}>
-              <motion.p
-                key={RECEIPTS[focused].id}
-                initial={{ opacity: 0, y: 6, filter: 'blur(4px)' }}
-                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                exit={{ opacity: 0, y: -5, filter: 'blur(4px)' }}
-                transition={{ duration: 0.22, ease: EASE }}
-                className="text-[15px] font-medium tracking-[-0.01em] text-ink"
-              >
-                {RECEIPTS[focused].label}
-              </motion.p>
-            </AnimatePresence>
-            <div className="flex items-center gap-1.5">
-              {RECEIPTS.map((r, i) => (
-                <span
-                  key={r.id}
-                  className="size-1.5 rounded-full transition-colors duration-200"
-                  style={{ background: i === focused ? '#0d0d0d' : 'rgba(13,13,13,0.22)' }}
-                />
-              ))}
-            </div>
-          </motion.div>
+              {expanded ? (
+                <motion.div
+                  key={`actions-${RECEIPTS[focused].id}`}
+                  initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
+                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                  exit={{ opacity: 0, y: 8, filter: 'blur(4px)' }}
+                  transition={{ duration: 0.26, ease: EASE }}
+                  className="pointer-events-auto flex flex-col items-center gap-3.5"
+                >
+                  <p className="text-[12px] font-medium tracking-[0.02em] text-ink-secondary">
+                    {RECEIPTS[focused].meta}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {/* Provider actions — what the artifact can do. */}
+                    {RECEIPTS[focused].actions.map((a) => (
+                      <button
+                        key={a}
+                        type="button"
+                        className="flex h-9 items-center rounded-full bg-ink px-4 text-[12px] font-medium whitespace-nowrap text-white outline-none transition-transform duration-200 ease-out active:scale-[0.96]"
+                      >
+                        {a}
+                      </button>
+                    ))}
+                    {/* The agent action — the door back to the turn that
+                        produced this receipt. */}
+                    <button
+                      type="button"
+                      onClick={() => onViewInThread?.(RECEIPTS[focused].id)}
+                      className="flex h-9 items-center rounded-full border border-black/10 bg-white/70 px-4 text-[12px] font-medium whitespace-nowrap text-ink backdrop-blur-[8px] outline-none transition-transform duration-200 ease-out active:scale-[0.96]"
+                    >
+                      View in thread
+                    </button>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key={`label-${RECEIPTS[focused].id}`}
+                  initial={{ opacity: 0, y: 6, filter: 'blur(4px)' }}
+                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                  exit={{ opacity: 0, y: -5, filter: 'blur(4px)' }}
+                  transition={{ duration: 0.22, ease: EASE }}
+                  className="flex flex-col items-center gap-3"
+                >
+                  <p className="text-[15px] font-medium tracking-[-0.01em] text-ink">
+                    {RECEIPTS[focused].label}
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    {RECEIPTS.map((r, i) => (
+                      <span
+                        key={r.id}
+                        className="size-1.5 rounded-full transition-colors duration-200"
+                        style={{ background: i === focused ? '#0d0d0d' : 'rgba(13,13,13,0.22)' }}
+                      />
+                    ))}
+                  </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Level three — the sheet grows out of the zoomed ticket and covers
+          the file; the dock's X (above) still closes everything. */}
+      <AnimatePresence>
+        {sheet && (
+          <ReceiptSheet
+            key={sheet.id}
+            id={sheet.id}
+            origin={sheet.origin}
+            onDismiss={() => setSheet(null)}
+            onViewInThread={() => onViewInThread?.(sheet.id)}
+          />
         )}
       </AnimatePresence>
     </div>

@@ -88,7 +88,17 @@ function ProviderChips({
   )
 }
 
-export function TransactionView({ variant = '2a' }: { variant?: TransactionVariant }) {
+export function TransactionView({
+  variant = '2a',
+  title = 'Sisters Birthday Weekend',
+  onCollapse,
+}: {
+  variant?: TransactionVariant
+  /** The island's conversation name (1C threads carry their own). */
+  title?: string
+  /** Wires the header's collapse chevrons (1C: back up to the home). */
+  onCollapse?: () => void
+}) {
   const [provider, setProvider] = useState<ProviderId>('yelp')
   const [selected, setSelected] = useState<{
     result: RankedResult
@@ -418,8 +428,9 @@ export function TransactionView({ variant = '2a' }: { variant?: TransactionVaria
       {viewport &&
         createPortal(
           <ConversationHeader
-            title="Sisters Birthday Weekend"
+            title={title}
             onIslandTap={() => tripFileBus.open()}
+            onCollapse={onCollapse}
           />,
           viewport,
         )}
@@ -435,6 +446,7 @@ export function TransactionView({ variant = '2a' }: { variant?: TransactionVaria
                 tasks={tasks}
                 onJumpToThread={jumpToDinnerTurn}
                 onStartThread={startCakeThread}
+                onViewInThread={jumpToDinnerTurn}
                 onClose={() => tripFileBus.close()}
               />
             )}

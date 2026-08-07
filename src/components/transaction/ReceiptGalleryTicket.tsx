@@ -114,19 +114,33 @@ function FieldRows({
           className="grid gap-x-3"
           style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))` }}
         >
-          {row.map((f) => (
-            <div key={f.l} className="flex flex-col gap-1">
-              <span className="text-[9.5px] tracking-[0.14em] uppercase" style={{ color: labelInk }}>
-                {f.l}
-              </span>
-              <span
-                className="text-[15px] leading-tight font-bold tracking-[-0.01em] whitespace-nowrap"
-                style={{ color: ink }}
-              >
-                {f.v}
-              </span>
-            </div>
-          ))}
+          {row.map((f, j) => {
+            // Justified stub alignment — first field hugs the left edge,
+            // last hugs the right, middles center. Rows with different
+            // field counts still share the same outer edges.
+            const align =
+              j === 0
+                ? 'items-start text-left'
+                : j === row.length - 1
+                  ? 'items-end text-right'
+                  : 'items-center text-center'
+            return (
+              <div key={f.l} className={`flex flex-col gap-1 ${align}`}>
+                <span
+                  className="text-[9.5px] tracking-[0.14em] whitespace-nowrap uppercase"
+                  style={{ color: labelInk }}
+                >
+                  {f.l}
+                </span>
+                <span
+                  className="text-[15px] leading-tight font-bold tracking-[-0.01em] whitespace-nowrap"
+                  style={{ color: ink }}
+                >
+                  {f.v}
+                </span>
+              </div>
+            )
+          })}
         </div>
       ))}
     </div>
@@ -278,12 +292,16 @@ export function DiningTicket({ index }: { index: number }) {
               { l: 'Party', v: '2' },
               { l: 'Table', v: "Chef's" },
               { l: 'Conf', v: 'VLT-8127' },
-              { l: 'Cancel by', v: '5:00 PM' },
             ],
           ]}
           ink="#ffffff"
           labelInk="rgba(255,255,255,0.55)"
         />
+        {/* Cancellation is a sentence, not a field — it never fits a
+            fourth column once the values get real. */}
+        <p className="-mt-1.5 text-center text-[10.5px] text-white/60">
+          Free to cancel until 5:00 PM day-of
+        </p>
         <Serial value="2913 8401 2987 4124" ink="rgba(255,255,255,0.5)" />
       </div>
     </Ticket>

@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { AltitudeHome } from '../components/home/AltitudeHome'
 import { MobileAppShell } from '../components/shell/MobileAppShell'
 import { RECEIPT_DOCK_SUGGESTIONS } from '../components/receipt/dockSuggestions'
 import { ReservationReceipt as ReceiptReservationReceipt } from '../components/receipt/ReservationReceipt'
@@ -11,6 +12,10 @@ import { ReceiptGalleryWallet } from '../components/transaction/ReceiptGalleryWa
 import { ReservationProvider } from '../components/transaction/reservationFlow'
 import { TransactionView } from '../components/transaction/TransactionView'
 import { EmptyState } from '../components/voice/EmptyState'
+import { GooLoader } from '../components/voice/GooLoader'
+import { GooLoaderGooey } from '../components/voice/GooLoaderGooey'
+import { GooLoaderRelay } from '../components/voice/GooLoaderRelay'
+import { HomeStates } from '../components/voice/HomeStates'
 import { VoiceControl } from '../components/voice/VoiceControl'
 
 /**
@@ -28,10 +33,31 @@ const PROTOTYPES: {
 }[] = [
   {
     id: 'empty-state',
-    tag: '1',
+    tag: '1A',
     label: 'Empty State',
     ambient: 'full',
     render: () => <VoiceControl idleContent={<EmptyState />} />,
+  },
+  {
+    // The home once the user has history — upcoming receipts, active
+    // projects, and connect-apps stacked on a vertical axis behind the
+    // trip file's notch rail.
+    id: 'home-states',
+    tag: '1B',
+    label: 'Returning User',
+    ambient: 'full',
+    render: () => <VoiceControl idleContent={<HomeStates />} />,
+  },
+  {
+    // The altitude model end to end: 1B's home with its Files state wired
+    // as doorways — a project's trip file pulls up in place, a thread row
+    // drops into the 2D booking conversation. AltitudeHome overrides the
+    // shell's ambient per altitude via the ambientBus.
+    id: 'file-room',
+    tag: '1C',
+    label: 'Files',
+    ambient: 'composer',
+    render: () => <AltitudeHome />,
   },
   // Transaction directions — one codebase, four presentations of the
   // follow-up/confirmation moment (the flow state machine is shared).
@@ -135,7 +161,70 @@ const PROTOTYPES: {
     ambient: 'composer',
     render: () => <ReceiptGalleryTicket />,
   },
+  {
+    // LogoGoo's liquid grammar as a loading indicator — bare ink blobs
+    // budding in all directions on a fast beat. The loader is born on
+    // mount; tap the stage to play its death and rebirth (the full arc it
+    // runs as the pause between screens — see 1C's Files → thread jump).
+    id: 'goo-loader',
+    tag: '5A',
+    label: 'Loader',
+    ambient: 'composer',
+    render: () => <LoaderArcDemo />,
+  },
+  {
+    // The storyboard variant: a peanut rotates to aim at its partner, the
+    // middle lobe hands off across the gap, the new pair rotates in turn,
+    // and the lobe glides home. Same ink, same goo.
+    id: 'goo-loader-relay',
+    tag: '5B',
+    label: 'Relay',
+    ambient: 'composer',
+    render: () => (
+      <div className="relative flex h-full flex-1 items-center justify-center">
+        <GooLoaderRelay size={110} />
+      </div>
+    ),
+  },
+  {
+    // Faithful take on Alexis Doreau's "Loader Gooey effect" (dribbble
+    // shot 2150230) in our ink: half-turn spins over the top, the lobe
+    // hops its old host on the way out, jelly squash-and-stretch all over.
+    id: 'goo-loader-gooey',
+    tag: '5C',
+    label: 'Gooey',
+    ambient: 'composer',
+    render: () => (
+      <div className="relative flex h-full flex-1 items-center justify-center">
+        <GooLoaderGooey size={110} />
+      </div>
+    ),
+  },
 ]
+
+/** Tag-5 stage: tap anywhere to kill the loader and watch it be reborn. */
+function LoaderArcDemo() {
+  const [generation, setGeneration] = useState(0)
+  const [exiting, setExiting] = useState(false)
+  return (
+    <button
+      type="button"
+      aria-label="Replay the loader's death and rebirth"
+      className="relative flex h-full flex-1 cursor-pointer items-center justify-center"
+      onClick={() => setExiting(true)}
+    >
+      <GooLoader
+        key={generation}
+        size={96}
+        exiting={exiting}
+        onExited={() => {
+          setExiting(false)
+          setGeneration((g) => g + 1)
+        }}
+      />
+    </button>
+  )
+}
 
 /** Active prototype id, synced with the URL hash so refresh/share keeps place. */
 function useActivePrototype() {
@@ -174,6 +263,9 @@ export function App() {
             return (
               <li key={p.id} className={isSub ? 'pl-3' : ''}>
                 {/* Group headings above the first lettered direction. */}
+                {p.tag === '1A' && (
+                  <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">1. Home</p>
+                )}
                 {p.tag === '2A' && (
                   <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">2. Transaction</p>
                 )}

@@ -34,8 +34,8 @@ const HOME = {
   C: { x: 29, y: 102, r: 29 }, // isolated disc — bottom-aligned with B
 }
 
-/** Cycle length in ms. */
-const CYCLE = 11000
+/** Cycle length in ms. Slightly under 11s — a touch snappier without rushing. */
+const CYCLE = 9000
 
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
 

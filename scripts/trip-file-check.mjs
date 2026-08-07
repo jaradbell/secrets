@@ -39,6 +39,34 @@ await dragTo(-180, 0)
 await page.waitForTimeout(700)
 await frame.screenshot({ path: `${OUT}/2-fan-swiped.png` })
 
+// Tap the focused ticket → expands to full scale with meta + actions
+await page.mouse.click(cx, cy)
+await page.waitForTimeout(900)
+await frame.screenshot({ path: `${OUT}/2b-expanded.png` })
+
+// Tap the expanded ticket again → the full sheet morphs out of it
+await page.mouse.click(cx, cy)
+await page.waitForTimeout(1000)
+await frame.screenshot({ path: `${OUT}/2c-sheet.png` })
+
+// Scroll the sheet to see details, scannable, actions, provenance
+await page.mouse.move(cx, cy)
+await page.mouse.wheel(0, 500)
+await page.waitForTimeout(600)
+await frame.screenshot({ path: `${OUT}/2d-sheet-scrolled.png` })
+
+// Grabber tap steps back to the zoomed ticket
+await page.mouse.wheel(0, -600)
+await page.waitForTimeout(500)
+await page.getByRole('button', { name: 'Back to receipts' }).click()
+await page.waitForTimeout(800)
+await frame.screenshot({ path: `${OUT}/2e-back-to-zoom.png` })
+
+// Drag down tucks it back into the fan
+await dragTo(0, 170)
+await page.waitForTimeout(800)
+await frame.screenshot({ path: `${OUT}/2f-collapsed.png` })
+
 // Vertical: swipe up to the tasks deck
 await dragTo(0, -160)
 await page.waitForTimeout(800)

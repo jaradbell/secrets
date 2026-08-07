@@ -1,5 +1,7 @@
+import { AnimatePresence, motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import { AmbientShaderBackground } from '../shared/AmbientShaderBackground'
+import { useAmbientOverride } from '../shared/ambientBus'
 
 /**
  * Frames the experience like a running mobile product. On desktop it centers a
@@ -10,6 +12,8 @@ import { AmbientShaderBackground } from '../shared/AmbientShaderBackground'
  * `ambient` controls the shader background: 'full' floods the frame (resting
  * screens); 'composer' drops it to a soft band at the bottom of the frame so
  * it glows behind the composer zone while conversation content sits on canvas.
+ * A prototype that moves between altitudes at runtime (1C) can override the
+ * registered mode through the ambientBus; the shell crossfades between them.
  */
 export function MobileAppShell({
   children,
@@ -18,6 +22,8 @@ export function MobileAppShell({
   children?: ReactNode
   ambient?: 'full' | 'composer'
 }) {
+  const override = useAmbientOverride()
+  const mode = override ?? ambient
   return (
     <div className="fixed inset-0 flex items-center justify-center overflow-hidden bg-[#ededed] sm:p-6">
       <div
@@ -35,29 +41,39 @@ export function MobileAppShell({
           ['--safe-bottom' as string]: 'max(env(safe-area-inset-bottom), 14px)',
         }}
       >
-        {ambient === 'full' ? (
-          <AmbientShaderBackground />
-        ) : (
-          <div
+        <AnimatePresence initial={false}>
+          <motion.div
+            key={mode}
             aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-[260px] overflow-hidden"
+            className="pointer-events-none absolute inset-0 z-0"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5, ease: 'easeInOut' }}
           >
-            <AmbientShaderBackground veil={false} />
-            {/* White gradient veil (instead of an alpha mask, whose fade edge
-                read as a seam against the canvas): solid white at the top so
-                the band dissolves into the page with no break, milky through
-                the middle to desaturate/soften the mesh, and nearly clear at
-                the bottom so the color animation reads strongest along the
-                bottom edge of the frame. */}
-            <div
-              className="absolute inset-0"
-              style={{
-                background:
-                  'linear-gradient(to bottom, #ffffff 0%, rgba(255,255,255,0.92) 20%, rgba(255,255,255,0.7) 44%, rgba(255,255,255,0.42) 68%, rgba(255,255,255,0.16) 88%, rgba(255,255,255,0.08) 100%)',
-              }}
-            />
-          </div>
-        )}
+            {mode === 'full' ? (
+              <AmbientShaderBackground />
+            ) : (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[260px] overflow-hidden">
+                <AmbientShaderBackground veil={false} />
+                {/* White gradient veil (instead of an alpha mask, whose fade
+                    edge read as a seam against the canvas): solid white at
+                    the top so the band dissolves into the page with no
+                    break, milky through the middle to desaturate/soften the
+                    mesh, and nearly clear at the bottom so the color
+                    animation reads strongest along the bottom edge of the
+                    frame. */}
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background:
+                      'linear-gradient(to bottom, #ffffff 0%, rgba(255,255,255,0.92) 20%, rgba(255,255,255,0.7) 44%, rgba(255,255,255,0.42) 68%, rgba(255,255,255,0.16) 88%, rgba(255,255,255,0.08) 100%)',
+                  }}
+                />
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
         {children}
       </div>
     </div>

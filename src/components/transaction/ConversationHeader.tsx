@@ -11,11 +11,20 @@
 import type { ReactNode } from 'react'
 
 /** Bare glyph button — 44px hit target, ink strokes, no container. */
-function GlyphButton({ label, children }: { label: string; children: ReactNode }) {
+function GlyphButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string
+  onClick?: () => void
+  children: ReactNode
+}) {
   return (
     <button
       type="button"
       aria-label={label}
+      onClick={onClick}
       className="flex size-11 items-center justify-center outline-none transition-transform duration-200 ease-out active:scale-90"
     >
       {children}
@@ -26,10 +35,13 @@ function GlyphButton({ label, children }: { label: string; children: ReactNode }
 export function ConversationHeader({
   title,
   onIslandTap,
+  onCollapse,
 }: {
   title: string
   /** Tapping the island opens the conversation's collected receipts. */
   onIslandTap?: () => void
+  /** Collapse steps the user back up an altitude (1C: thread → home). */
+  onCollapse?: () => void
 }) {
   return (
     <div
@@ -49,7 +61,7 @@ export function ConversationHeader({
       />
       {/* Collapse */}
       <div className="flex justify-start">
-        <GlyphButton label="Collapse conversation">
+        <GlyphButton label="Collapse conversation" onClick={onCollapse}>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path
               d="M6 7.5 10 3.5 14 7.5M6 12.5 10 16.5 14 12.5"
