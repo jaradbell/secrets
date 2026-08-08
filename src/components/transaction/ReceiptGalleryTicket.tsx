@@ -246,8 +246,23 @@ export function FlightTicket({ index }: { index: number }) {
   )
 }
 
-/** Dining — photo hero with display type, tearing into a dark red stub. */
-export function DiningTicket({ index }: { index: number }) {
+/** Dining — photo hero with display type, tearing into a dark red stub.
+    Slot props let the reservation flow render the live booking; the gallery's
+    hardcoded keepsake stays the default. One typeset — in-thread callers
+    shrink the whole ticket uniformly (zoom) so the proportions never drift. */
+export function DiningTicket({
+  index,
+  place = 'Valette',
+  date = 'Sat, 25 Jul 2026',
+  time = '7:30 PM',
+  party = 2,
+}: {
+  index: number
+  place?: string
+  date?: string
+  time?: string
+  party?: number
+}) {
   return (
     <Ticket
       index={index}
@@ -268,7 +283,7 @@ export function DiningTicket({ index }: { index: number }) {
         />
         <div className="absolute bottom-4 left-5">
           <p className="text-[38px] leading-none font-extrabold tracking-[-0.02em] text-white uppercase">
-            Valette
+            {place}
           </p>
           <p className="mt-1.5 text-[10px] tracking-[0.2em] text-white/70 uppercase">
             Healdsburg, CA
@@ -280,16 +295,16 @@ export function DiningTicket({ index }: { index: number }) {
 
       <div className="flex flex-col gap-4 px-6 pt-5 pb-5">
         <p className="text-center text-[12.5px] font-medium text-white/75">
-          Dinner reservation · Table for two
+          Dinner reservation · Table for {party}
         </p>
         <FieldRows
           rows={[
             [
-              { l: 'Date', v: 'Sat, 25 Jul 2026' },
-              { l: 'Time', v: '7:30 PM' },
+              { l: 'Date', v: date },
+              { l: 'Time', v: time },
             ],
             [
-              { l: 'Party', v: '2' },
+              { l: 'Party', v: String(party) },
               { l: 'Table', v: "Chef's" },
               { l: 'Conf', v: 'VLT-8127' },
             ],

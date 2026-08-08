@@ -66,6 +66,10 @@ uniform vec4 u_aura;       // voice parting 0..1, focus point.xy, focus amount
 #define u_oklab u_transform.w
 #define u_offset u_space.xy
 #define u_mouse u_space.zw
+// The pour rides u_space.z — the pointer slot is free in this app (cursor
+// presence is always 0, so u_mouse is never read). WebGL1 guarantees only
+// 16 fragment uniform vectors and all 16 are packed, so no new slot exists.
+#define u_pour u_space.z
 #define u_cursorPresence u_cursor.x
 #define u_cursorEffect u_cursor.y
 #define u_cursorStrength u_cursor.z
@@ -209,6 +213,39 @@ vec3 shade(vec2 uv, vec2 p, float t) {
       sin(t * (0.21 + fi * 0.071) + fi * 2.4 + u_seed),
       cos(t * (0.17 + fi * 0.093) + fi * 1.7)) * (0.45 + u_intensity * 0.35);
     float sharp = 6.0;
+    // Pour choreography (u_pour 0 → 1): the field splits down the center —
+    // each bloom slides to its own side's edge, streams down that edge, then
+    // regathers along the base of the frame. Progress is staggered per bloom
+    // so the mass reads as liquid strands rather than a rigid formation, and
+    // the blooms tighten as they travel so the pooled band keeps distinct
+    // pockets of colour instead of averaging into mud. Everything keeps its
+    // orbital drift underneath, so the pooled state stays alive.
+    if (u_pour > 0.001) {
+      // Frame extents in field space (aspect-corrected, scaled).
+      vec2 ext = 0.5 * u_resolution.xy
+        / min(u_resolution.x, u_resolution.y) * u_scale;
+      float side = c.x >= 0.0 ? 1.0 : -1.0;
+      // Staggered progress — each bloom sets off a beat after the last,
+      // so the pour reads as strands chasing each other down the frame.
+      float s = clamp(u_pour * 1.45 - fi * 0.09, 0.0, 1.0);
+      // Three distinct acts: part to the edges, run down them, regather.
+      float toEdge = smoothstep(0.0, 0.3, s);
+      float descend = smoothstep(0.3, 0.72, s);
+      float regather = smoothstep(0.72, 1.0, s);
+      vec2 g = c;
+      g.x = mix(g.x, side * ext.x * 1.06, toEdge);
+      g.y = mix(g.y, -ext.y + 0.22 + 0.1 * c.y, descend);
+      // Rivulet wiggle on the way down — liquid, not an elevator.
+      g.x += side * 0.065 * sin(s * 14.0 + fi * 1.7)
+        * descend * (1.0 - descend) * 4.0;
+      g.x = mix(g.x, c.x * 0.62, regather);
+      // Landing bounce: dip a touch past the pool line, then settle up.
+      g.y -= 0.055 * sin(regather * 3.14159);
+      c = g;
+      // Tighten as the mass descends — not before, so the split plays on a
+      // still-lush field instead of snapping the frame to white.
+      sharp = mix(sharp, 10.5, smoothstep(0.3, 0.8, s));
+    }
     if (u_focusAmt > 0.001) {
       vec2 rel = c - fp;
       float d = length(rel);
@@ -354,6 +391,7 @@ function compileShader(
 export function AmbientShaderBackground({
   veil = true,
   focus,
+  pour = false,
 }: {
   veil?: boolean
   /** Gathers the mesh around a point: the colour blooms migrate toward it
@@ -363,11 +401,24 @@ export function AmbientShaderBackground({
       `{ x: 0.5, y: 0.5 }`. Strength eases in/out on mount/unmount and
       breathes slowly while held. */
   focus?: { x: number; y: number }
+  /** Pours the mesh to the base of the frame: the field splits down the
+      center, the blooms stream down the frame's edges and rebuild as a
+      glow along the bottom — the composer-band state. Eases in/out on
+      change, playing the journey both ways. */
+  pour?: boolean
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   // Read per-frame inside the render loop without re-running the GL setup.
   const focusRef = useRef(focus)
   focusRef.current = focus
+  const pourRef = useRef(pour)
+  pourRef.current = pour
+  // Reduced motion has no frame loop — the setup effect parks a one-shot
+  // repaint here so a pour change still lands on the static frame.
+  const staticRedraw = useRef<(() => void) | null>(null)
+  useEffect(() => {
+    staticRedraw.current?.()
+  }, [pour])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -447,6 +498,15 @@ export function AmbientShaderBackground({
 
     let vw = 0
     let vh = 0
+    // Seconds of the most recent frame — so a resize can repaint in place.
+    let lastSeconds = 0
+
+    const draw = (seconds: number) => {
+      // u_scene = vec4(width, height, seconds * 0.73, colorCount)
+      gl.uniform4f(uScene, vw, vh, seconds * 0.73, THEME_COLORS.length)
+      gl.drawArrays(gl.TRIANGLES, 0, 3)
+    }
+
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
       const w = Math.max(1, Math.round(canvas.clientWidth * dpr))
@@ -457,6 +517,11 @@ export function AmbientShaderBackground({
       canvas.width = w
       canvas.height = h
       gl.viewport(0, 0, w, h)
+      // Setting canvas.width clears the buffer to opaque black; when the
+      // host animates the band's height (the shell's full ↔ composer pour)
+      // that black would flash every frame until the loop's next draw.
+      // Repaint immediately so a resize is never visible on its own.
+      draw(lastSeconds)
     }
     // Defer to rAF to avoid the benign "ResizeObserver loop completed with
     // undelivered notifications" warning that Vite surfaces as an error overlay.
@@ -479,12 +544,17 @@ export function AmbientShaderBackground({
     // Focus gathering, eased the same way so the gradient visibly arrives
     // when work starts and relaxes when it ends.
     let focusAmt = 0
-
-    const draw = (seconds: number) => {
-      // u_scene = vec4(width, height, seconds * 0.73, colorCount)
-      gl.uniform4f(uScene, vw, vh, seconds * 0.73, THEME_COLORS.length)
-      gl.drawArrays(gl.TRIANGLES, 0, 3)
-    }
+    // The pour is a journey, not a settle: a clock-based tween with an
+    // ease-in-out, so its three acts (split, run the edges, regather) play
+    // at full speed instead of decaying exponentially into a fade. It
+    // starts wherever the host mounted it — a screen born in composer mode
+    // shows the settled band, not the journey — and a mid-flight reversal
+    // tweens back from wherever it is.
+    const POUR_MS = 1400
+    let pourGoal = pourRef.current ? 1 : 0
+    let pourFrom = pourGoal
+    let pourAmt = pourGoal
+    let pourStart = -1e9
 
     const frameLoop = (now: number) => {
       const dt = Math.min((now - last) / 1000, 0.1)
@@ -494,6 +564,19 @@ export function AmbientShaderBackground({
       part += (target - part) * (1 - Math.exp(-dt * (target > part ? 5 : 3)))
       const focus = focusRef.current
       focusAmt += ((focus ? 1 : 0) - focusAmt) * (1 - Math.exp(-dt * 2.2))
+      const pourTarget = pourRef.current ? 1 : 0
+      if (pourTarget !== pourGoal) {
+        pourGoal = pourTarget
+        pourFrom = pourAmt
+        pourStart = now
+      }
+      const pt = Math.min((now - pourStart) / POUR_MS, 1)
+      // Sine ease: soft ends but real motion from the first frames — a
+      // cubic's long wind-up compressed the acts into the middle and read
+      // as a fade.
+      const pe = 0.5 - 0.5 * Math.cos(Math.PI * pt)
+      pourAmt = pourFrom + (pourGoal - pourFrom) * pe
+      gl.uniform4f(uSpace, 0.0, 0.0, pourAmt, 0.0)
       gl.uniform4f(
         uAura,
         part,
@@ -501,7 +584,8 @@ export function AmbientShaderBackground({
         focus ? 1 - focus.y : 0.5, // gl_FragCoord's origin is bottom-left
         focusAmt,
       )
-      draw(elapsed / 1000)
+      lastSeconds = elapsed / 1000
+      draw(lastSeconds)
       raf = requestAnimationFrame(frameLoop)
     }
 
@@ -519,15 +603,21 @@ export function AmbientShaderBackground({
     document.addEventListener('visibilitychange', onVisibility)
 
     if (reducedMotion) {
-      const focus = focusRef.current
-      if (focus) gl.uniform4f(uAura, 0.0, focus.x, 1 - focus.y, 0.9)
-      draw(10.0) // single static frame
+      staticRedraw.current = () => {
+        const focus = focusRef.current
+        if (focus) gl.uniform4f(uAura, 0.0, focus.x, 1 - focus.y, 0.9)
+        gl.uniform4f(uSpace, 0.0, 0.0, pourRef.current ? 1 : 0, 0.0)
+        lastSeconds = 10.0
+        draw(lastSeconds) // single static frame
+      }
+      staticRedraw.current()
     } else {
       raf = requestAnimationFrame(frameLoop)
     }
 
     return () => {
       if (raf) cancelAnimationFrame(raf)
+      staticRedraw.current = null
       document.removeEventListener('visibilitychange', onVisibility)
       observer.disconnect()
       gl.deleteBuffer(buffer)

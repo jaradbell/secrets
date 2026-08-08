@@ -16,6 +16,8 @@ import { GooLoader } from '../components/voice/GooLoader'
 import { GooLoaderGooey } from '../components/voice/GooLoaderGooey'
 import { GooLoaderRelay } from '../components/voice/GooLoaderRelay'
 import { HomeStates } from '../components/voice/HomeStates'
+import { ProjectGridHome } from '../components/home/ProjectGridHome'
+import { MoodboardHome } from '../components/projects/MoodboardHome'
 import { VoiceControl } from '../components/voice/VoiceControl'
 
 /**
@@ -162,12 +164,66 @@ const PROTOTYPES: {
     render: () => <ReceiptGalleryTicket />,
   },
   {
+    // Projects as a moodboard — each active project is a collage cluster
+    // (photos, title bubble, provider stickers) anchored by a sticky note
+    // that keeps the tasks legible: open-count badge, top 2–3 inline,
+    // "+N more" for the long tail. Artifacts drag and snap home. A
+    // segmented control up top switches between the Assistant home and
+    // the board — the board unpins and drops off on the way out.
+    id: 'projects-moodboard',
+    tag: '5A',
+    label: 'Moodboard',
+    // Both faces sit on white canvas with the mesh pooled at the base,
+    // behind the dock — the collage and the ticket stack carry the color.
+    ambient: 'composer',
+    // MoodboardHome hosts its own VoiceControl — the board's tool notch
+    // summons search into the dock's hint slot.
+    render: () => <MoodboardHome />,
+  },
+  {
+    // Projects as a card grid, plus the navigation model underneath:
+    // grid → project home → conversation, with back as history (a stack —
+    // every chevron pops one screen, returning wherever you came from).
+    // A new project's floor fans the template deck behind the composer.
+    id: 'project-grid',
+    tag: '5B',
+    label: 'Project Grid',
+    ambient: 'composer',
+    render: () => <ProjectGridHome />,
+  },
+  {
+    // Three rooms under one segmented pill — Todo (the board), Do (the
+    // Assistant conversation, seated center as the implicit home) and
+    // Decide (where open calls gather). Starting a conversation doesn't
+    // page away: the pill itself morphs into the context chip carrying
+    // the new conversation's name, and the floor develops in place. The
+    // draft empty state keeps 5C's ask-anything grammar.
+    id: 'project-grid-ask',
+    tag: '5C',
+    label: 'Todo · Do · Decide',
+    ambient: 'composer',
+    render: () => <ProjectGridHome chrome="trio" draftVariant="ask" />,
+  },
+  {
+    // A two-place root (Assistant + Projects) where navigation lives
+    // behind a drawer: the Assistant is home, and a bare handle in the top-left
+    // slides out the menu — Projects, Conversations, and Archive open the
+    // board to a shelf; New project is the same door as the grid's dashed
+    // tile. The mesh stays poured at the base of the frame throughout —
+    // no full-mesh flood at any altitude.
+    id: 'project-grid-menu',
+    tag: '5E',
+    label: 'Menu',
+    ambient: 'composer',
+    render: () => <ProjectGridHome chrome="menu" />,
+  },
+  {
     // LogoGoo's liquid grammar as a loading indicator — bare ink blobs
     // budding in all directions on a fast beat. The loader is born on
     // mount; tap the stage to play its death and rebirth (the full arc it
     // runs as the pause between screens — see 1C's Files → thread jump).
     id: 'goo-loader',
-    tag: '5A',
+    tag: '6A',
     label: 'Loader',
     ambient: 'composer',
     render: () => <LoaderArcDemo />,
@@ -177,7 +233,7 @@ const PROTOTYPES: {
     // middle lobe hands off across the gap, the new pair rotates in turn,
     // and the lobe glides home. Same ink, same goo.
     id: 'goo-loader-relay',
-    tag: '5B',
+    tag: '6B',
     label: 'Relay',
     ambient: 'composer',
     render: () => (
@@ -191,7 +247,7 @@ const PROTOTYPES: {
     // shot 2150230) in our ink: half-turn spins over the top, the lobe
     // hops its old host on the way out, jelly squash-and-stretch all over.
     id: 'goo-loader-gooey',
-    tag: '5C',
+    tag: '6C',
     label: 'Gooey',
     ambient: 'composer',
     render: () => (
@@ -202,7 +258,7 @@ const PROTOTYPES: {
   },
 ]
 
-/** Tag-5 stage: tap anywhere to kill the loader and watch it be reborn. */
+/** Tag-6 stage: tap anywhere to kill the loader and watch it be reborn. */
 function LoaderArcDemo() {
   const [generation, setGeneration] = useState(0)
   const [exiting, setExiting] = useState(false)
@@ -271,6 +327,12 @@ export function App() {
                 )}
                 {p.tag === '4A' && (
                   <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">4. Receipt Objects</p>
+                )}
+                {p.tag === '5A' && (
+                  <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">5. Projects</p>
+                )}
+                {p.tag === '6A' && (
+                  <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">6. Goo Loader</p>
                 )}
                 <a
                   href={`#${p.id}`}

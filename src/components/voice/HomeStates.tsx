@@ -14,7 +14,7 @@
  *   Connect — the first-run connect-apps state, still reachable since
  *   there's always another app to wire in.
  */
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion'
 import { useState } from 'react'
 import {
   DiningTicket,
@@ -28,6 +28,10 @@ const EASE = [0.32, 0.72, 0, 1] as const
 /** Swipe distance / fling velocity that flips states. */
 const FLIP_OFFSET = 60
 const FLIP_VELOCITY = 500
+
+/** Pull distance / fling velocity that commits the notch pull (5F). */
+const PULL_COMMIT = 48
+const PULL_FLING = 520
 
 const PAGES = ['upcoming', 'files', 'connect'] as const
 type Page = (typeof PAGES)[number]
@@ -316,11 +320,20 @@ function FilesPage({
 export function HomeStates({
   onOpenProject,
   onOpenThread,
+  pages = PAGES,
+  onNotchPull,
 }: {
   /** Makes the Files rows doorways — 1C opens a project's trip file or
       drops into a thread. Without them the rows are inert sketch (1B). */
   onOpenProject?: (id: string) => void
   onOpenThread?: (id: string) => void
+  /** Which states the home cycles. Hosts that surface projects elsewhere
+      drop Files rather than duplicate it. */
+  pages?: readonly Page[]
+  /** 5F: makes the notch a handle — pulling it left drags the edge of the
+      receipts space into the frame; past the threshold, release commits
+      (the host opens the trip file). Without it the notch only pages. */
+  onNotchPull?: () => void
 } = {}) {
   const [page, setPage] = useState(0)
   // Travel direction feeds the slide variants: forward pages enter from
@@ -328,15 +341,26 @@ export function HomeStates({
   const [dir, setDir] = useState(1)
 
   const goTo = (next: number) => {
-    if (next === page || next < 0 || next >= PAGES.length) return
+    if (next === page || next < 0 || next >= pages.length) return
     setDir(next > page ? 1 : -1)
     setPage(next)
   }
 
+  // 5F's pull — the notch's horizontal offset, and the receipt stubs
+  // developing in the band it opens (fully told by ~56px out).
+  const notchX = useMotionValue(0)
+  const stubOpacity = useTransform(notchX, [-56, -14], [1, 0])
+
+  // A single-page home has nowhere to page: the notch and the vertical
+  // swipe both stand down (5E — the menu carries the lateral moves).
+  // With onNotchPull the notch stays regardless: it's a handle there.
+  const pager = pages.length > 1
+  const rail = pager || !!onNotchPull
+
   return (
     <motion.div
       className="relative h-full w-full"
-      drag="y"
+      drag={pager ? 'y' : false}
       dragDirectionLock
       dragConstraints={{ top: 0, bottom: 0 }}
       dragElastic={0.12}
@@ -351,7 +375,7 @@ export function HomeStates({
     >
       <AnimatePresence initial={false} custom={dir}>
         <motion.div
-          key={PAGES[page]}
+          key={pages[page]}
           className="absolute inset-0"
           custom={dir}
           variants={{
@@ -364,9 +388,9 @@ export function HomeStates({
           exit="exit"
           transition={{ duration: 0.45, ease: EASE }}
         >
-          {PAGES[page] === 'upcoming' ? (
+          {pages[page] === 'upcoming' ? (
             <UpcomingPage />
-          ) : PAGES[page] === 'files' ? (
+          ) : pages[page] === 'files' ? (
             <FilesPage onOpenProject={onOpenProject} onOpenThread={onOpenThread} />
           ) : (
             <div className="flex h-full items-center justify-center">
@@ -377,9 +401,26 @@ export function HomeStates({
       </AnimatePresence>
 
       {/* State rail — the notch from the trip file, one dash per state,
-          bled past the column's padding to sit in the frame's edge. */}
+          bled past the column's padding to sit in the frame's edge. With
+          onNotchPull it's also a handle: the notch is the molded end of
+          the receipts space, and pulling it left drags that space's dark
+          edge into the frame (5F). */}
+      {rail && (
       <div className="absolute -right-4 top-1/2 z-10 h-[120px] w-[34px] -translate-y-1/2">
-        <svg
+        <motion.div
+          className="absolute inset-0"
+          aria-label={onNotchPull ? 'Pull out receipts' : undefined}
+          style={{ x: notchX, touchAction: 'none' }}
+          drag={onNotchPull ? 'x' : false}
+          dragConstraints={{ left: -84, right: 0 }}
+          dragElastic={{ left: 0.16, right: 0 }}
+          dragMomentum={false}
+          dragSnapToOrigin
+          onDragEnd={(_, info) => {
+            if (info.offset.x < -PULL_COMMIT || info.velocity.x < -PULL_FLING) onNotchPull?.()
+          }}
+        >
+          <svg
           className="absolute inset-0"
           width="34"
           height="120"
@@ -389,8 +430,25 @@ export function HomeStates({
         >
           <path d="M34 0C34 13 4 15 4 30L4 90C4 105 34 107 34 120Z" fill="#131117" />
         </svg>
+          {/* The tail — the sheet the notch is molded onto. Parked fully
+              off-frame at rest (the viewport clips it); the pull slides it
+              into view as the dark band bridging notch and edge. */}
+          {onNotchPull && (
+            <div className="absolute top-0 left-[33px] h-[120px] w-[240px] bg-[#131117]">
+              {/* Receipt stubs, edge-on — a hint of what's inside,
+                  developing as the pull opens the band. */}
+              <motion.div
+                className="absolute inset-y-0 left-2.5 flex flex-col items-start justify-center gap-[5px]"
+                style={{ opacity: stubOpacity }}
+              >
+                <span className="h-[3px] w-4 rounded-full bg-white/40" />
+                <span className="h-[3px] w-3 rounded-full bg-white/25" />
+                <span className="h-[3px] w-3.5 rounded-full bg-white/30" />
+              </motion.div>
+            </div>
+          )}
         <div className="absolute inset-y-0 right-0 left-1 flex flex-col items-center justify-center gap-1">
-          {PAGES.map((p, i) => {
+          {pages.map((p, i) => {
             const isActive = i === page
             return (
               <button
@@ -409,7 +467,9 @@ export function HomeStates({
             )
           })}
         </div>
+        </motion.div>
       </div>
+      )}
     </motion.div>
   )
 }

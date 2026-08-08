@@ -17,7 +17,7 @@ import { PROVIDERS, PROVIDER_RESULTS, type ProviderId, type RankedResult } from 
 import { InlineConfirmCard } from './InlineConfirmCard'
 import { PlaceCardStack } from './PlaceCardStack'
 import { PlaceDetailsView, type MorphOrigin } from './PlaceDetailsView'
-import { ReceiptCard } from './ReceiptCard'
+import { DiningTicket } from './ReceiptGalleryTicket'
 import { useReservationFlow } from './reservationFlow'
 import { tripFileBus, useTripFileOpen } from '../shared/tripFileBus'
 import { TripFile, type TripTask } from './TripFile'
@@ -40,7 +40,7 @@ function TypingDots() {
   )
 }
 
-function ProviderChips({
+export function ProviderChips({
   active,
   onSelect,
 }: {
@@ -92,12 +92,16 @@ export function TransactionView({
   variant = '2a',
   title = 'Sisters Birthday Weekend',
   onCollapse,
+  onIslandTap,
 }: {
   variant?: TransactionVariant
   /** The island's conversation name (1C threads carry their own). */
   title?: string
   /** Wires the header's collapse chevrons (1C: back up to the home). */
   onCollapse?: () => void
+  /** Overrides the island tap — 5B opens the project container instead
+      of the default receipts fan. */
+  onIslandTap?: () => void
 }) {
   const [provider, setProvider] = useState<ProviderId>('yelp')
   const [selected, setSelected] = useState<{
@@ -366,9 +370,83 @@ export function TransactionView({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0, transition: { duration: 0.18 } }}
-              className="mt-1"
+              className="relative mt-1 pb-2 pl-10"
             >
-              <ReceiptCard place={flow.place ?? 'Valette Restaurant'} slots={flow.slots} />
+              {/* A dotted thread ties the confirmation prose toward its
+                  keepsake — trailing off before the card, like a stitch. */}
+              <svg
+                aria-hidden="true"
+                className="absolute top-[-4px] left-[9px]"
+                width="40"
+                height="52"
+                viewBox="0 0 40 52"
+                fill="none"
+              >
+                <motion.path
+                  d="M2 1 C 3 18, 7 34, 22 44"
+                  stroke="rgba(23,23,23,0.3)"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeDasharray="0.1 6.5"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.15, duration: 0.4, ease: 'easeOut' }}
+                />
+              </svg>
+
+              {/* The keepsake, tossed into the thread rather than set on the
+                  margin — smaller, off the left edge, settling into a lazy
+                  tilt (the snapshot-pile grammar, not a layout block). */}
+              <motion.div
+                className="relative mt-6 w-fit"
+                initial={{ opacity: 0, y: 16, rotate: 0, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, rotate: -3.5, scale: 1 }}
+                transition={{ type: 'spring', stiffness: 190, damping: 20, delay: 0.2 }}
+              >
+                {/* 4E ticket scaled down uniformly — the width is pinned to
+                    the keepsake's full-size design (gallery: 393 viewport −
+                    2×21 gutters) and zoom shrinks both axes together, so the
+                    proportions never drift from the original typeset. The
+                    hero wants the display name, so the generic suffix drops
+                    ("Valette Restaurant" → "Valette"). */}
+                <div style={{ zoom: 0.62, width: 351 }}>
+                  <DiningTicket
+                    index={0}
+                    place={(flow.place ?? 'Valette Restaurant').replace(/ Restaurant$/, '')}
+                    date={flow.slots.date ?? 'Saturday, Jul 25'}
+                    time={flow.slots.time ?? '7:30 PM'}
+                    party={flow.slots.party ?? 2}
+                  />
+                </div>
+
+                {/* Corner sticker — the one thing the ticket can't say:
+                    how far away the event is. Receipt objects are alive;
+                    relative time is their voice (coarse while far out,
+                    sharpening as it nears — "Tonight · 7:30", "In 45 min").
+                    Counter-tilted, landing a beat after the ticket settles. */}
+                <motion.span
+                  className="absolute -top-2.5 -right-3 flex items-center gap-1.5 rounded-full bg-ink py-[7px] pr-3.5 pl-3 text-[11.5px] font-medium tracking-[0.01em] text-white shadow-[0_4px_16px_rgba(0,0,0,0.28)]"
+                  initial={{ opacity: 0, scale: 0.6, rotate: 12 }}
+                  animate={{ opacity: 1, scale: 1, rotate: 5 }}
+                  transition={{ type: 'spring', stiffness: 320, damping: 18, delay: 0.55 }}
+                >
+                  <svg
+                    width="11"
+                    height="11"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7.5V12l3 2" />
+                  </svg>
+                  In 2 days
+                </motion.span>
+              </motion.div>
             </motion.div>
           ) : bookingTurn ? (
             <motion.div
@@ -429,7 +507,7 @@ export function TransactionView({
         createPortal(
           <ConversationHeader
             title={title}
-            onIslandTap={() => tripFileBus.open()}
+            onIslandTap={onIslandTap ?? (() => tripFileBus.open())}
             onCollapse={onCollapse}
           />,
           viewport,

@@ -176,11 +176,16 @@ export function PlaceCardStack({
   results,
   starColor,
   onSelect,
+  ambient = true,
 }: {
   results: RankedResult[]
   starColor: string
   /** Tap on the front card drills into that place (flick still pages). */
   onSelect?: (result: RankedResult) => void
+  /** The color wash behind the glass. Turn it off where the canvas
+      already carries color (the draft floor's mesh) — its blurred layer
+      clips at the element bounds and reads as a faint rectangle there. */
+  ambient?: boolean
 }) {
   const reduced = useReducedMotion()
   const [current, setCurrent] = useState(0)
@@ -205,6 +210,7 @@ export function PlaceCardStack({
       {/* Ambient color behind the glass — kept quiet, just enough that the
           frost doesn't read as flat gray. The stack's depth comes from the
           cards' own material (fill, hairline, soft shadow), not from color. */}
+      {ambient && (
       <div
         aria-hidden
         className="pointer-events-none absolute -inset-10"
@@ -217,6 +223,7 @@ export function PlaceCardStack({
           ].join(', '),
         }}
       />
+      )}
       {results.map((r, i) => {
         // Depth behind the front card, wrapping so the deck cycles.
         const depth = (i - current + n) % n

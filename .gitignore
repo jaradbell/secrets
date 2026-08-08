@@ -26,3 +26,4 @@ dist-ssr
 
 # Playwright check output
 screens
+scripts/shots

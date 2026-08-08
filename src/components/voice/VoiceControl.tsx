@@ -51,6 +51,74 @@ export type DockSuggestion = {
 /** Presses shorter than this are taps (toggle); longer are hold-to-talk. */
 const HOLD_MS = 450
 
+/** The dock's flanking buttons (opt-in via dockAux) — compose and type,
+    small dark discs beside the orb. Sized well under the 72px orb so the
+    mic keeps clear primacy in the row. */
+const AUX_SIZE = 43
+const AUX_GAP = 16
+
+/** One flank — a quiet dark disc in the orb's own material, white glyph.
+    Absolutely hung off the row's center so the orb's pill/inline morphs
+    never have to negotiate layout with it. */
+function AuxButton({
+  side,
+  label,
+  children,
+}: {
+  side: 'left' | 'right'
+  label: string
+  children: ReactNode
+}) {
+  return (
+    <motion.button
+      type="button"
+      aria-label={label}
+      className="absolute top-1/2 flex items-center justify-center rounded-full bg-[#17141b] shadow-[0_10px_26px_-10px_rgba(20,16,28,0.55)] outline-none"
+      style={{
+        width: AUX_SIZE,
+        height: AUX_SIZE,
+        y: '-50%',
+        [side === 'left' ? 'right' : 'left']: `calc(50% + ${ORB_SIZE / 2 + AUX_GAP}px)`,
+      }}
+      initial={{ opacity: 0, scale: 0.6 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.6 }}
+      transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+      whileTap={{ scale: 0.9 }}
+    >
+      {children}
+    </motion.button>
+  )
+}
+
+function PlusGlyph() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" stroke="#ffffff" strokeWidth="2.1" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function KeyboardGlyph() {
+  return (
+    <svg
+      width="21"
+      height="21"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="#ffffff"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="2.75" y="6" width="18.5" height="12.5" rx="2.6" />
+      <path d="M6.4 9.6h.01M10.15 9.6h.01M13.9 9.6h.01M17.65 9.6h.01M6.4 12.4h.01M10.15 12.4h.01M13.9 12.4h.01M17.65 12.4h.01" />
+      <path d="M8 15.2h8" />
+    </svg>
+  )
+}
+
 const TIME_OPTIONS = ['6:30 PM', '7:00 PM', '7:30 PM', '8:00 PM']
 const PARTY_OPTIONS = [1, 2, 3, 4, 5, 6]
 
@@ -184,7 +252,10 @@ export function VoiceControl({
   followUp = 'pill',
   receipt: Receipt = ReservationReceipt,
   hideHintWhenFocused = false,
+  dockHint,
+  dockAux = false,
   suggestions,
+  onUtterance,
 }: {
   idleContent?: ReactNode
   followUp?: FollowUpMode
@@ -195,11 +266,23 @@ export function VoiceControl({
   /** Drop the resting "Hold or tap to speak" hint while a details sheet has
       focus (the sheet's own affordances carry the moment). */
   hideHintWhenFocused?: boolean
+  /** Replaces the resting "Hold or tap to speak" text with the host's own
+      chrome (e.g. a floating search chip) — same slot, same airspace. Voice
+      states ("Listening…", follow-up prompts) still take the slot over. */
+  dockHint?: ReactNode
+  /** Flank the orb with compose (+) and type (keyboard) discs — dark
+      circles in the orb's material. They stand down whenever the dock
+      leaves plain-orb shape (pill morph, inline dock, trip file). */
+  dockAux?: boolean
   /** Opt-in inline dock: while a details sheet has focus, the orb morphs
       into a compact "Follow-up" pill docked right. A tap glides it left and
       deals these chips out of its wake (hold still pours into listening);
       tapping again or away tucks them back in. */
   suggestions?: DockSuggestion[]
+  /** A resting utterance completed (listening → thinking) and no flow was
+      there to consume it — the host can act on the words (5B's grid births
+      a project from them; its draft floor takes a name). */
+  onUtterance?: (transcript: string) => void
 }) {
   const { status, transcript, response, error, levelRef, start, finish } = useVoiceInput()
   const meta = STATE_META[status]
@@ -263,22 +346,23 @@ export function VoiceControl({
     }
   }, [auraOn])
 
-  // A follow-up utterance completed (listening → thinking): mine it for
-  // time / party and fill the slots. Tapping and speaking land in the same
-  // place — both are natural-language input.
+  // An utterance completed (listening → thinking). Mid-follow-up the flow
+  // consumes it — mine it for time / party and fill the slots. At rest it
+  // goes to the host's onUtterance, if it wants the words. Tapping and
+  // speaking land in the same place — both are natural-language input.
   const prevStatusRef = useRef(status)
   useEffect(() => {
-    if (
-      flow &&
-      flow.stage === 'followUp' &&
-      prevStatusRef.current === 'listening' &&
-      status === 'thinking' &&
-      transcript.trim()
-    ) {
-      flow.fillFromUtterance(transcript)
+    const uttered =
+      prevStatusRef.current === 'listening' && status === 'thinking' && transcript.trim()
+    if (uttered) {
+      if (flow && flow.stage === 'followUp') {
+        flow.fillFromUtterance(transcript)
+      } else if (stage === 'none') {
+        onUtterance?.(transcript.trim())
+      }
     }
     prevStatusRef.current = status
-  }, [status, transcript, flow])
+  }, [status, transcript, flow, stage, onUtterance])
 
   // Slot popovers (time / party pickers) anchored above the pill.
   const [popover, setPopover] = useState<'time' | 'party' | null>(null)
@@ -551,10 +635,25 @@ export function VoiceControl({
 
         {/* The dock's single text slot. The agent's follow-up question takes
             it over transiently — develops in, holds a beat, dissolves — and
-            the standard hint animates back in its place. In the inline dock
-            the bar carries the text instead. */}
+            the standard hint animates back in its place. A host-provided
+            dockHint (the floating search chip) owns the slot at rest; voice
+            states still take it over. In the inline dock the bar carries the
+            text instead. */}
         {!inline && (
+          <div className={`flex items-center justify-center ${dockHint ? 'min-h-10' : ''}`}>
           <AnimatePresence mode="wait" initial={false}>
+              {dockHint && stage === 'none' && status === 'idle' && !error && !tripOpen ? (
+                <motion.div
+                  key="dock-hint"
+                  initial={{ opacity: 0, y: 8, filter: 'blur(6px)' }}
+                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                  exit={{ opacity: 0, y: -6, filter: 'blur(6px)' }}
+                  transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+                  className="flex justify-center"
+                >
+                  {dockHint}
+                </motion.div>
+              ) : (
             <motion.p
               key={dockText}
               initial={{ opacity: 0, y: 8, filter: 'blur(6px)' }}
@@ -567,14 +666,30 @@ export function VoiceControl({
             >
               {dockText}
             </motion.p>
+              )}
           </AnimatePresence>
+          </div>
         )}
 
         <div
-          className={`flex items-center ${
+          className={`relative flex items-center ${
             inline ? (expanded ? 'w-full justify-start' : 'w-full justify-end') : 'justify-center'
           }`}
         >
+        {/* The flanks — present only while the dock is a plain orb, so
+            the pill morph and inline dock keep their stage to themselves. */}
+        <AnimatePresence>
+          {dockAux && !isPill && !inline && !tripOpen && (
+            <AuxButton key="aux-plus" side="left" label="New">
+              <PlusGlyph />
+            </AuxButton>
+          )}
+          {dockAux && !isPill && !inline && !tripOpen && (
+            <AuxButton key="aux-keys" side="right" label="Type instead">
+              <KeyboardGlyph />
+            </AuxButton>
+          )}
+        </AnimatePresence>
         <motion.button
           type="button"
           // Position-only layout animation so the button glides between the

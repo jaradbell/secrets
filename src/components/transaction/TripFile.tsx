@@ -148,12 +148,17 @@ function StatusRing({ state }: { state: TripTask['state'] }) {
 
 export function TripFile({
   tasks = [],
+  initialReceiptId,
   onJumpToThread,
   onStartThread,
   onViewInThread,
   onClose,
 }: {
   tasks?: TripTask[]
+  /** Enter the deck at a specific card, already zoomed — for doorways
+      that lead to one receipt (the briefing's stubs). Swiping still
+      cycles the whole hand from there. */
+  initialReceiptId?: string
   /** An in-flight task was tapped — close and land on its turn. */
   onJumpToThread?: (task: TripTask) => void
   /** An untouched task was tapped — close and open a new seeded thread. */
@@ -163,11 +168,14 @@ export function TripFile({
   onViewInThread?: (receiptId: string) => void
   onClose: () => void
 }) {
+  const entryIdx = initialReceiptId
+    ? RECEIPTS.findIndex((r) => r.id === initialReceiptId)
+    : -1
   const [deck, setDeck] = useState<Deck>('receipts')
-  const [focused, setFocused] = useState(0)
+  const [focused, setFocused] = useState(entryIdx >= 0 ? entryIdx : 0)
   // Wallet-style focus: the tapped ticket glides to center at full scale
   // while the rest of the hand falls away. Deck flips always reset it.
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(entryIdx >= 0)
   // Level three — the full sheet, expanding from the zoomed ticket's
   // measured bounds. Tap the zoomed ticket to enter; drag down to leave.
   const [sheet, setSheet] = useState<{ id: string; origin: SheetOrigin } | null>(null)

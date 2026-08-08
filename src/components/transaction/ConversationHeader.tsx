@@ -8,6 +8,7 @@
  * Island visuals from Figma node 2377:73623 (frosted pill, white hairline,
  * soft 40px shadow, ticket badge in a quiet bordered disc).
  */
+import { motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 
 /** Bare glyph button — 44px hit target, ink strokes, no container. */
@@ -36,12 +37,23 @@ export function ConversationHeader({
   title,
   onIslandTap,
   onCollapse,
+  fitIsland = false,
+  scrim = true,
 }: {
-  title: string
+  /** The island names the conversation. Omit it entirely for a conversation
+      that isn't a thing yet (an unnamed draft) — no name, no island. */
+  title?: string
   /** Tapping the island opens the conversation's collected receipts. */
   onIslandTap?: () => void
   /** Collapse steps the user back up an altitude (1C: thread → home). */
   onCollapse?: () => void
+  /** Size the island to its text (a fresh draft's name) instead of the
+      threads' fixed width. */
+  fitIsland?: boolean
+  /** The fade protecting the chrome from content scrolling beneath it.
+      Turn it off on floors where nothing scrolls under the header — over
+      a bare canvas its whites mismatch and it reads as a ghost band. */
+  scrim?: boolean
 }) {
   return (
     <div
@@ -51,6 +63,7 @@ export function ConversationHeader({
       {/* Protective scrim — the thread scrolls up behind the header, so a
           canvas fade keeps the chrome legible instead of colliding with
           cards and copy sliding beneath it. */}
+      {scrim && (
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[116px]"
@@ -59,6 +72,7 @@ export function ConversationHeader({
             'linear-gradient(to bottom, #fcfcfc 0%, #fcfcfc 50%, rgba(252,252,252,0.75) 70%, rgba(252,252,252,0) 100%)',
         }}
       />
+      )}
       {/* Collapse */}
       <div className="flex justify-start">
         <GlyphButton label="Collapse conversation" onClick={onCollapse}>
@@ -74,23 +88,36 @@ export function ConversationHeader({
         </GlyphButton>
       </div>
 
-      {/* Context island */}
-      <button
-        type="button"
-        aria-label={`Conversation: ${title}`}
-        onClick={onIslandTap}
-        className="flex items-center gap-0.5 rounded-[24px] border border-white bg-[rgba(250,250,250,0.7)] py-[9px] pr-2 pl-3 shadow-[0px_2px_40px_0px_rgba(0,0,0,0.1)] outline-none backdrop-blur-[12px] transition-transform duration-200 ease-out active:scale-[0.97]"
-      >
-        <span className="w-[136px] overflow-hidden text-left text-[12px] font-medium tracking-[0.12px] text-ellipsis whitespace-nowrap text-[#171717]">
-          {title}
-        </span>
-        {/* Receipts badge — where the conversation's receipts will collect. */}
-        <span className="flex items-center rounded-[30px] border border-[#ececec] bg-[#f5f5f5] p-[3px]">
-          <span className="flex size-[18px] items-center justify-center">
-            <img src="/nav/ticket.svg" alt="" draggable={false} className="h-[9px] w-auto" />
+      {/* Context island — absent until the conversation has a name to
+          carry (a draft earns its island the moment it's named). */}
+      {title !== undefined ? (
+        <motion.button
+          key={title}
+          type="button"
+          aria-label={`Conversation: ${title}`}
+          onClick={onIslandTap}
+          initial={{ opacity: 0, scale: 0.92, y: -4 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+          className="flex items-center gap-0.5 rounded-[24px] border border-white bg-[rgba(250,250,250,0.7)] py-[9px] pr-2 pl-3 shadow-[0px_2px_40px_0px_rgba(0,0,0,0.1)] outline-none backdrop-blur-[12px] transition-transform duration-200 ease-out active:scale-[0.97]"
+        >
+          <span
+            className={`${
+              fitIsland ? 'max-w-[176px]' : 'w-[136px]'
+            } overflow-hidden text-left text-[12px] font-medium tracking-[0.12px] text-ellipsis whitespace-nowrap text-[#171717]`}
+          >
+            {title}
           </span>
-        </span>
-      </button>
+          {/* Receipts badge — where the conversation's receipts will collect. */}
+          <span className="flex items-center rounded-[30px] border border-[#ececec] bg-[#f5f5f5] p-[3px]">
+            <span className="flex size-[18px] items-center justify-center">
+              <img src="/nav/ticket.svg" alt="" draggable={false} className="h-[9px] w-auto" />
+            </span>
+          </span>
+        </motion.button>
+      ) : (
+        <span aria-hidden="true" />
+      )}
 
       {/* Menu */}
       <div className="flex items-center justify-end gap-1">
