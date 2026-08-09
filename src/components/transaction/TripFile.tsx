@@ -16,11 +16,12 @@
  * into an X to close.
  */
 import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AmbientShaderBackground } from '../shared/AmbientShaderBackground'
 import {
   DiningTicket,
   FlightTicket,
+  GameTicket,
   HotelTicket,
   RideTicket,
 } from './ReceiptGalleryTicket'
@@ -28,10 +29,20 @@ import { ReceiptSheet, type SheetOrigin } from './ReceiptSheet'
 
 const EASE = [0.32, 0.72, 0, 1] as const
 
-/** The weekend's artifacts, in trip order. index -1 mutes the tickets' own
-    gallery entrance — the fan deals them up itself. `meta` and `actions`
-    surface under the ticket when it's expanded to full scale. */
-const RECEIPTS = [
+/** One artifact in a file's hand. `meta` and `actions` surface under the
+    ticket when it's expanded to full scale. */
+export type TripReceipt = {
+  id: string
+  label: string
+  meta: string
+  actions: string[]
+  render: () => ReactNode
+}
+
+/** The weekend's artifacts, in trip order — the scoped hand a conversation
+    fans. index -1 mutes the tickets' own gallery entrance — the fan deals
+    them up itself. */
+const RECEIPTS: TripReceipt[] = [
   {
     id: 'flight',
     label: 'Flight · United',
@@ -59,6 +70,20 @@ const RECEIPTS = [
     meta: 'Uber · UBR-88213 · En route',
     actions: ['Track ride'],
     render: () => <RideTicket index={-1} />,
+  },
+]
+
+/** The wallet's hand — every receipt across every conversation, not one
+    trip's. The Sisters weekend's four plus the artifacts other threads
+    produced. Scoped views (a conversation's trip file) keep RECEIPTS. */
+export const WALLET_RECEIPTS: TripReceipt[] = [
+  ...RECEIPTS,
+  {
+    id: 'game',
+    label: 'Warriors · Ticketmaster',
+    meta: 'Ticketmaster · TM-448210 · Confirmed',
+    actions: ['Transfer', 'Add to Wallet'],
+    render: () => <GameTicket index={-1} />,
   },
 ]
 
@@ -147,6 +172,9 @@ function StatusRing({ state }: { state: TripTask['state'] }) {
 }
 
 export function TripFile({
+  title = 'Sisters Birthday Weekend',
+  caption = 'Jul 25 – 27',
+  receipts = RECEIPTS,
   tasks = [],
   initialReceiptId,
   onJumpToThread,
@@ -154,6 +182,13 @@ export function TripFile({
   onViewInThread,
   onClose,
 }: {
+  /** What this file is. Defaults to the scoped trip; the wallet passes
+      its own name and the cross-conversation hand. */
+  title?: string
+  /** The receipts caption's trailing clause ("Jul 25 – 27", "all
+      conversations") — rendered after the count. */
+  caption?: string
+  receipts?: TripReceipt[]
   tasks?: TripTask[]
   /** Enter the deck at a specific card, already zoomed — for doorways
       that lead to one receipt (the briefing's stubs). Swiping still
@@ -169,7 +204,7 @@ export function TripFile({
   onClose: () => void
 }) {
   const entryIdx = initialReceiptId
-    ? RECEIPTS.findIndex((r) => r.id === initialReceiptId)
+    ? receipts.findIndex((r) => r.id === initialReceiptId)
     : -1
   const [deck, setDeck] = useState<Deck>('receipts')
   const [focused, setFocused] = useState(entryIdx >= 0 ? entryIdx : 0)
@@ -211,11 +246,14 @@ export function TripFile({
     dealtRef.current = true
   }, [])
 
+  // A file with no to-dos (the wallet) is a single-deck object: no rail,
+  // no vertical flip — just the hand.
+  const hasTasks = tasks.length > 0
   const doneCount = tasks.filter((t) => t.state === 'done').length
 
   const onTaskTap = (task: TripTask) => {
     if (task.state === 'done' && task.receiptId) {
-      const idx = RECEIPTS.findIndex((r) => r.id === task.receiptId)
+      const idx = receipts.findIndex((r) => r.id === task.receiptId)
       if (idx >= 0) {
         setFocused(idx)
         setDeck('receipts')
@@ -280,9 +318,7 @@ export function TripFile({
         }}
         exit={{ opacity: 0, y: -8, transition: { duration: 0.2, ease: 'easeIn' } }}
       >
-        <p className="text-[14px] font-semibold tracking-[-0.01em] text-ink">
-          Sisters Birthday Weekend
-        </p>
+        <p className="text-[14px] font-semibold tracking-[-0.01em] text-ink">{title}</p>
         <AnimatePresence mode="wait" initial={false}>
           <motion.p
             key={deck}
@@ -293,7 +329,7 @@ export function TripFile({
             className="mt-0.5 text-[11.5px] text-ink-secondary"
           >
             {deck === 'receipts'
-              ? `${RECEIPTS.length} receipts · Jul 25 – 27`
+              ? `${receipts.length} receipts · ${caption}`
               : `${tasks.length} tasks · ${doneCount} done`}
           </motion.p>
         </AnimatePresence>
@@ -303,7 +339,8 @@ export function TripFile({
           dash per deck. Each side of the silhouette is a single cubic
           bézier — one continuous S from the frame edge into the notch wall
           (arc-to-line joints read as kinks); the fanned cards slide
-          beneath it. */}
+          beneath it. A single-deck file has nothing to flip, so no rail. */}
+      {hasTasks && (
       <motion.div
         className="absolute right-0 z-10 h-[96px] w-[34px]"
         style={{ top: '50%', y: '-50%', pointerEvents: expanded ? 'none' : 'auto' }}
@@ -350,6 +387,7 @@ export function TripFile({
           })}
         </div>
       </motion.div>
+      )}
 
       {/* The deck surface — one drag plane, two axes. Direction lock commits
           each gesture: horizontal steps the fan, vertical flips decks. */}
@@ -382,7 +420,7 @@ export function TripFile({
               return
             }
             if (info.offset.x < -SWIPE_OFFSET || info.velocity.x < -SWIPE_VELOCITY) {
-              setFocused((f) => Math.min(RECEIPTS.length - 1, f + 1))
+              setFocused((f) => Math.min(receipts.length - 1, f + 1))
             } else if (info.offset.x > SWIPE_OFFSET || info.velocity.x > SWIPE_VELOCITY) {
               setFocused((f) => Math.max(0, f - 1))
             }
@@ -390,7 +428,7 @@ export function TripFile({
           }
           if (Math.abs(info.offset.y) > Math.abs(info.offset.x)) {
             if (info.offset.y < -DECK_OFFSET || info.velocity.y < -DECK_VELOCITY) {
-              setDeck('tasks')
+              if (hasTasks) setDeck('tasks')
             } else if (info.offset.y > DECK_OFFSET || info.velocity.y > DECK_VELOCITY) {
               setDeck('receipts')
             }
@@ -398,7 +436,7 @@ export function TripFile({
           }
           if (deck !== 'receipts') return
           if (info.offset.x < -SWIPE_OFFSET || info.velocity.x < -SWIPE_VELOCITY) {
-            setFocused((f) => Math.min(RECEIPTS.length - 1, f + 1))
+            setFocused((f) => Math.min(receipts.length - 1, f + 1))
           } else if (info.offset.x > SWIPE_OFFSET || info.velocity.x > SWIPE_VELOCITY) {
             setFocused((f) => Math.max(0, f - 1))
           }
@@ -418,7 +456,7 @@ export function TripFile({
               transition={{ duration: 0.45, ease: EASE }}
             >
               <div className="absolute left-1/2 top-1/2 h-0 w-[340px] -translate-x-1/2 scale-[0.74]">
-                {RECEIPTS.map((r, i) => {
+                {receipts.map((r, i) => {
                   const offset = i - focused
                   return (
                     <div
@@ -447,12 +485,12 @@ export function TripFile({
                             y: 340,
                             transition: {
                               y: {
-                                delay: (RECEIPTS.length - 1 - i) * 0.035,
+                                delay: (receipts.length - 1 - i) * 0.035,
                                 duration: 0.36,
                                 ease: [0.5, 0, 0.75, 0.4],
                               },
                               opacity: {
-                                delay: (RECEIPTS.length - 1 - i) * 0.035 + 0.14,
+                                delay: (receipts.length - 1 - i) * 0.035 + 0.14,
                                 duration: 0.18,
                               },
                             },
@@ -608,7 +646,7 @@ export function TripFile({
             <AnimatePresence mode="wait" initial={false}>
               {expanded ? (
                 <motion.div
-                  key={`actions-${RECEIPTS[focused].id}`}
+                  key={`actions-${receipts[focused].id}`}
                   initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
                   animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
                   exit={{ opacity: 0, y: 8, filter: 'blur(4px)' }}
@@ -616,11 +654,11 @@ export function TripFile({
                   className="pointer-events-auto flex flex-col items-center gap-3.5"
                 >
                   <p className="text-[12px] font-medium tracking-[0.02em] text-ink-secondary">
-                    {RECEIPTS[focused].meta}
+                    {receipts[focused].meta}
                   </p>
                   <div className="flex items-center gap-2">
                     {/* Provider actions — what the artifact can do. */}
-                    {RECEIPTS[focused].actions.map((a) => (
+                    {receipts[focused].actions.map((a) => (
                       <button
                         key={a}
                         type="button"
@@ -633,7 +671,7 @@ export function TripFile({
                         produced this receipt. */}
                     <button
                       type="button"
-                      onClick={() => onViewInThread?.(RECEIPTS[focused].id)}
+                      onClick={() => onViewInThread?.(receipts[focused].id)}
                       className="flex h-9 items-center rounded-full border border-black/10 bg-white/70 px-4 text-[12px] font-medium whitespace-nowrap text-ink backdrop-blur-[8px] outline-none transition-transform duration-200 ease-out active:scale-[0.96]"
                     >
                       View in thread
@@ -642,7 +680,7 @@ export function TripFile({
                 </motion.div>
               ) : (
                 <motion.div
-                  key={`label-${RECEIPTS[focused].id}`}
+                  key={`label-${receipts[focused].id}`}
                   initial={{ opacity: 0, y: 6, filter: 'blur(4px)' }}
                   animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
                   exit={{ opacity: 0, y: -5, filter: 'blur(4px)' }}
@@ -650,10 +688,10 @@ export function TripFile({
                   className="flex flex-col items-center gap-3"
                 >
                   <p className="text-[15px] font-medium tracking-[-0.01em] text-ink">
-                    {RECEIPTS[focused].label}
+                    {receipts[focused].label}
                   </p>
                   <div className="flex items-center gap-1.5">
-                    {RECEIPTS.map((r, i) => (
+                    {receipts.map((r, i) => (
                       <span
                         key={r.id}
                         className="size-1.5 rounded-full transition-colors duration-200"

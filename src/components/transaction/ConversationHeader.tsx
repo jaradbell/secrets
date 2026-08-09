@@ -37,7 +37,6 @@ export function ConversationHeader({
   title,
   onIslandTap,
   onCollapse,
-  fitIsland = false,
   scrim = true,
 }: {
   /** The island names the conversation. Omit it entirely for a conversation
@@ -47,9 +46,6 @@ export function ConversationHeader({
   onIslandTap?: () => void
   /** Collapse steps the user back up an altitude (1C: thread → home). */
   onCollapse?: () => void
-  /** Size the island to its text (a fresh draft's name) instead of the
-      threads' fixed width. */
-  fitIsland?: boolean
   /** The fade protecting the chrome from content scrolling beneath it.
       Turn it off on floors where nothing scrolls under the header — over
       a bare canvas its whites mismatch and it reads as a ghost band. */
@@ -101,11 +97,10 @@ export function ConversationHeader({
           transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
           className="flex items-center gap-0.5 rounded-[24px] border border-white bg-[rgba(250,250,250,0.7)] py-[9px] pr-2 pl-3 shadow-[0px_2px_40px_0px_rgba(0,0,0,0.1)] outline-none backdrop-blur-[12px] transition-transform duration-200 ease-out active:scale-[0.97]"
         >
-          <span
-            className={`${
-              fitIsland ? 'max-w-[176px]' : 'w-[136px]'
-            } overflow-hidden text-left text-[12px] font-medium tracking-[0.12px] text-ellipsis whitespace-nowrap text-[#171717]`}
-          >
+          {/* Fit-to-text with a ceiling: a fixed width left short names
+              floating in dead pill (the gap before the badge); the cap
+              keeps long names from crowding the corner glyphs. */}
+          <span className="max-w-[176px] overflow-hidden text-left text-[12px] font-medium tracking-[0.12px] text-ellipsis whitespace-nowrap text-[#171717]">
             {title}
           </span>
           {/* Receipts badge — where the conversation's receipts will collect. */}

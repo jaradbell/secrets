@@ -241,6 +241,9 @@ export function SearchDock({
   openOnMount = false,
   open: openProp,
   onOpenChange,
+  filters,
+  activeFilter = null,
+  onFilter,
 }: {
   query: string
   onQuery: (q: string) => void
@@ -253,6 +256,12 @@ export function SearchDock({
       away. Omit both and the chip manages itself. */
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /** One-tap lenses riding above the field — for when the answer is a
+      question ("what needs me?"), not a name. One active at a time;
+      tapping the active chip puts the lens down. */
+  filters?: { id: string; label: string }[]
+  activeFilter?: string | null
+  onFilter?: (id: string | null) => void
 }) {
   const [openState, setOpenState] = useState(openOnMount)
   const open = openProp ?? openState
@@ -266,6 +275,9 @@ export function SearchDock({
   }, [])
 
   const applied = query.trim()
+  const filterLabel = filters?.find((f) => f.id === activeFilter)?.label ?? ''
+  /** What the resting chip wears — lens, words, or both. */
+  const worn = [filterLabel, applied].filter(Boolean).join(' · ')
 
   return (
     <>
@@ -275,7 +287,7 @@ export function SearchDock({
       <motion.button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label={applied ? `Search: ${applied}` : 'Search'}
+        aria-label={worn ? `Search: ${worn}` : 'Search'}
         animate={open ? { opacity: 0, y: 6, scale: 0.92 } : { opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.25, ease: EASE }}
         className="flex h-10 items-center gap-2 rounded-full border border-white bg-[rgba(250,250,250,0.75)] px-4 shadow-[0px_2px_24px_rgba(0,0,0,0.10)] backdrop-blur-[12px] outline-none transition-transform duration-200 ease-out active:scale-[0.96]"
@@ -284,12 +296,19 @@ export function SearchDock({
         <SearchIcon className="shrink-0 text-ink-secondary" />
         <span
           className={`max-w-44 truncate text-[13px] font-medium tracking-[-0.01em] ${
-            applied ? 'text-ink' : 'text-ink-secondary'
+            worn ? 'text-ink' : 'text-ink-secondary'
           }`}
         >
-          {applied || 'Search'}
+          {worn || 'Search'}
         </span>
-        {applied && <ClearButton onClear={() => onQuery('')} />}
+        {worn && (
+          <ClearButton
+            onClear={() => {
+              onQuery('')
+              onFilter?.(null)
+            }}
+          />
+        )}
       </motion.button>
 
       {/* The open state — portaled to the frame so the keyboard rises from
@@ -360,6 +379,32 @@ export function SearchDock({
                           'linear-gradient(to top, rgba(250,250,250,0.85) 40%, rgba(250,250,250,0) 100%)',
                       }}
                     />
+                    {/* The lenses — one-tap questions above the field.
+                        Active chip goes ink; tap it again to put the
+                        lens down. They ride the field's spring so the
+                        rise stays one gesture. */}
+                    {filters && filters.length > 0 && (
+                      <div className="relative mb-2.5 flex justify-center gap-2 px-3">
+                        {filters.map((f) => {
+                          const active = f.id === activeFilter
+                          return (
+                            <button
+                              key={f.id}
+                              type="button"
+                              aria-pressed={active}
+                              onClick={() => onFilter?.(active ? null : f.id)}
+                              className={`flex h-8 items-center rounded-full px-3.5 text-[12.5px] font-medium tracking-[-0.01em] outline-none transition-all duration-200 ease-out active:scale-95 ${
+                                active
+                                  ? 'bg-ink text-white shadow-[0_8px_24px_-6px_rgba(0,0,0,0.35)]'
+                                  : 'border border-white bg-[rgba(252,252,252,0.9)] text-ink-secondary shadow-[0_6px_20px_-6px_rgba(0,0,0,0.18)] backdrop-blur-[12px]'
+                              }`}
+                            >
+                              {f.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                     <div className="relative flex items-center gap-3 px-3 pb-2.5">
                       <div className="flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-full border border-white bg-[rgba(252,252,252,0.92)] px-4 shadow-[0_10px_36px_-6px_rgba(0,0,0,0.22)] backdrop-blur-[12px]">
                         <SearchIcon className="shrink-0 text-ink-tertiary" />
@@ -382,6 +427,7 @@ export function SearchDock({
                         type="button"
                         onClick={() => {
                           onQuery('')
+                          onFilter?.(null)
                           setOpen(false)
                         }}
                         className="shrink-0 text-[15px] tracking-[-0.01em] text-[#007aff] outline-none active:opacity-60"

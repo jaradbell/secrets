@@ -35,7 +35,7 @@ import {
 import { PlaceCardStack } from '../transaction/PlaceCardStack'
 import { ReservationProvider } from '../transaction/reservationFlow'
 import { ProviderChips, TransactionView } from '../transaction/TransactionView'
-import { TripFile, type TripTask } from '../transaction/TripFile'
+import { TripFile, WALLET_RECEIPTS, type TripTask } from '../transaction/TripFile'
 import { GooTransition } from '../voice/GooTransition'
 import { HomeStates } from '../voice/HomeStates'
 import { LogoGoo } from '../voice/LogoGoo'
@@ -820,7 +820,7 @@ const TRIO_SEGMENTS: { id: Place; label: string }[] = [
 ]
 
 /** The drawer's handle — three bars, drawn 1:1 for crisp strokes. */
-function MenuGlyph() {
+export function MenuGlyph() {
   return (
     <svg
       width="22"
@@ -852,6 +852,7 @@ function TrioChrome({
   place,
   title,
   onSwitch,
+  onMenu,
 }: {
   /** segments at the root, chip inside a conversation, hidden elsewhere
       (threads carry their own header). */
@@ -860,12 +861,40 @@ function TrioChrome({
   /** The conversation's name once it has one ("New project" until). */
   title?: string
   onSwitch: (p: Place) => void
+  /** The drawer handle — drawn on this same frame layer so it centers
+      on the pill exactly (the 44px button matches its 44px height).
+      Root-only: it comes and goes with the segments. (A wallet corner
+      lived opposite it once — at glyph size a ticket reads as a blob,
+      so receipts stay behind the briefing's stubs and the drawer.) */
+  onMenu?: () => void
 }) {
+  // +28px seats this band at the same height as 5A's view switch and
+  // 5E's drawer handle (handle tops all land 51px into the frame) —
+  // the three roots should feel like one room with different doors.
+  const cornerTop = { top: 'calc(var(--safe-top) + 28px)' }
   return (
     <div
       className="pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-center"
-      style={{ paddingTop: 'calc(var(--safe-top) + 14px)' }}
+      style={{ paddingTop: 'calc(var(--safe-top) + 28px)' }}
     >
+      <AnimatePresence>
+        {mode === 'segments' && onMenu && (
+          <motion.button
+            key="corner-menu"
+            type="button"
+            aria-label="Open menu"
+            onClick={onMenu}
+            className="pointer-events-auto absolute left-[18px] flex size-11 items-center justify-center text-ink outline-none transition-transform duration-200 ease-out active:scale-90"
+            style={cornerTop}
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6, transition: { duration: 0.15, ease: EASE } }}
+            transition={{ duration: 0.3, ease: EASE }}
+          >
+            <MenuGlyph />
+          </motion.button>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {mode !== 'hidden' && (
           <motion.div
@@ -902,7 +931,7 @@ function TrioChrome({
                         aria-label={seg.label}
                         aria-pressed={isActive}
                         onClick={() => onSwitch(seg.id)}
-                        className="relative flex h-[34px] w-[76px] items-center justify-center outline-none transition-transform duration-200 ease-out active:scale-95"
+                        className="relative flex h-[34px] w-[64px] items-center justify-center outline-none transition-transform duration-200 ease-out active:scale-95"
                       >
                         {/* The thumb — solid black so the active room's
                             name reads in reversed white ink. */}
@@ -1481,15 +1510,19 @@ const MENU_THREADS = [
     the frameCardBus), and this dark surface is what it reveals. System
     rows up top, then every loose conversation. Tapping the card closes;
     tapping a thread sails straight into it. */
-function SideMenu({
+export function SideMenu({
   open,
   onOpenThread,
   onApps,
+  onWallet,
 }: {
   open: boolean
   onOpenThread: (title: string) => void
   /** The Apps row is a real doorway — it opens the home's connect face. */
   onApps?: () => void
+  /** The Wallet / Receipts row — closes the drawer and fans the global
+      receipts deck. */
+  onWallet?: () => void
 }) {
   return (
     <AnimatePresence>
@@ -1531,7 +1564,9 @@ function SideMenu({
                     transition: { delay: 0.12 + i * 0.04, duration: 0.32, ease: EASE },
                   }}
                   type="button"
-                  onClick={label === 'Apps' ? onApps : undefined}
+                  onClick={
+                    label === 'Apps' ? onApps : label === 'Wallet / Receipts' ? onWallet : undefined
+                  }
                   className="flex h-11 items-center text-left text-[16px] font-medium tracking-[-0.01em] text-white/90 outline-none transition-colors duration-150 active:text-white"
                 >
                   {label}
@@ -2523,9 +2558,15 @@ export function ProjectGridHome({
                           />
                         )
                       ) : (
-                        // 5C's Do room — the assistant's spoken briefing,
-                        // no notch: the trio pill is the only wayfinding.
-                        <BriefingHome onOpen={(title) => push({ kind: 'thread', title })} />
+                      // 5C's Do room — the assistant's spoken briefing,
+                      // no notch: the trio pill is the only wayfinding.
+                      <BriefingHome
+                        onOpen={(title) => push({ kind: 'thread', title })}
+                        onOpenReceipt={(id) => {
+                          setHomeReceipt(id)
+                          tripFileBus.open()
+                        }}
+                      />
                       )
                     ) : place === 'decide' ? (
                       // 5C's third room — open calls gather here; quiet
@@ -2619,13 +2660,13 @@ export function ProjectGridHome({
                     )}
                   </motion.div>
                 </AnimatePresence>
-                {chrome === 'trio' ? null : ( // 5C's pill lives on the frame (portaled) so it can morph across screens.
+                {chrome === 'trio' ? null : ( // 5C's chrome (pill + corner glyphs) lives on the frame (portaled) so it can morph across screens.
                   // 5E's chrome — bare glyphs at the frame's corners: the
                   // drawer handle on the left, and on the right the four
                   // dots into Projects, which become the X back out — one
                   // button, both directions (the board yields its ⋯ for it).
                   <div
-                    className="pointer-events-none absolute inset-x-0 z-20 flex items-center justify-between"
+                    className="pointer-events-none absolute inset-x-[10px] z-20 flex items-center justify-between"
                     style={{ top: 'calc(var(--safe-top) + 6px)' }}
                   >
                     <motion.button
@@ -2721,7 +2762,6 @@ export function ProjectGridHome({
                             ? activeDraft.title
                             : undefined
                       }
-                      fitIsland
                       scrim={activeDraft.named}
                       onCollapse={pop}
                     />,
@@ -2786,17 +2826,24 @@ export function ProjectGridHome({
         createPortal(
           <TrioChrome
             mode={
-              screen.kind === 'grid'
-                ? 'segments'
-                : screen.kind === 'draft'
-                  ? 'chip'
-                  : 'hidden'
+              // The pill is frame furniture, so it would float over the
+              // menu floor while the app cards away, or over the fanned
+              // receipts — it belongs to the rooms, so it steps off with
+              // them.
+              menuOpen || receiptsOpen
+                ? 'hidden'
+                : screen.kind === 'grid'
+                  ? 'segments'
+                  : screen.kind === 'draft'
+                    ? 'chip'
+                    : 'hidden'
             }
             place={place}
             title={
               activeDraft ? (activeDraft.named ? activeDraft.title : 'New project') : undefined
             }
             onSwitch={switchPlace}
+            onMenu={() => setMenuOpen(true)}
           />,
           viewport,
         )}
@@ -2829,7 +2876,7 @@ export function ProjectGridHome({
           pulls the whole app right into a card and this is what's under
           it. Root-only: the handle it slides from only exists there. */}
       {viewport &&
-        chrome === 'menu' &&
+        (chrome === 'menu' || chrome === 'trio') &&
         screen.kind === 'grid' &&
         createPortal(
           <SideMenu
@@ -2838,10 +2885,25 @@ export function ProjectGridHome({
               setMenuOpen(false)
               push({ kind: 'thread', title })
             }}
-            onApps={() => {
+            // The connect face is menu-chrome furniture; the trio's rooms
+            // don't have it, so its Apps row stays quiet cargo there.
+            onApps={
+              chrome === 'menu'
+                ? () => {
+                    setMenuOpen(false)
+                    setHomeFace('connect')
+                    switchPlace('assistant')
+                  }
+                : undefined
+            }
+            // Wallet / Receipts — the drawer is the wallet's own door: it
+            // closes over the home (where the cycler mounts) and fans the
+            // global hand.
+            onWallet={() => {
               setMenuOpen(false)
-              setHomeFace('connect')
-              switchPlace('assistant')
+              setHomeReceipt(null)
+              if (chrome === 'menu') switchPlace('assistant')
+              tripFileBus.open()
             }}
           />,
           viewport,
@@ -2869,28 +2931,29 @@ export function ProjectGridHome({
           screenEl,
         )}
 
-      {/* 5E's home cycler — a briefing stub is a doorway to one receipt,
-          but the receipt is never alone: the same trip-file deck rises,
-          already zoomed to the asked-for card, swipe to cycle the rest. */}
+      {/* The home cycler — the wallet. Home sits above any one thread, so
+          this hand is global (every receipt across every conversation),
+          unlike a conversation's scoped trip file. A briefing stub enters
+          it zoomed to the asked-for card; swiping cycles the rest. */}
       {screenEl &&
-        chrome === 'menu' &&
         screen.kind === 'grid' &&
-        place === 'assistant' &&
+        (chrome === 'menu' ? place === 'assistant' : chrome === 'trio') &&
         createPortal(
           <AnimatePresence onExitComplete={() => setHomeReceipt(null)}>
             {receiptsOpen && (
               <TripFile
                 key="home-receipts"
-                tasks={SISTERS_TASKS}
+                title="Wallet"
+                caption="all conversations"
+                receipts={WALLET_RECEIPTS}
                 initialReceiptId={homeReceipt ?? undefined}
-                onViewInThread={() =>
-                  push({ kind: 'thread', title: 'Sisters Birthday Weekend' })
-                }
-                onJumpToThread={() =>
-                  push({ kind: 'thread', title: 'Sisters Birthday Weekend' })
-                }
-                onStartThread={(task) =>
-                  push({ kind: 'thread', title: task.seed ?? task.label })
+                // Each artifact doors back to the conversation that
+                // produced it — not one fixed thread.
+                onViewInThread={(id) =>
+                  push({
+                    kind: 'thread',
+                    title: id === 'game' ? 'Warriors vs Lakers' : 'Sisters Birthday Weekend',
+                  })
                 }
                 onClose={() => tripFileBus.close()}
               />

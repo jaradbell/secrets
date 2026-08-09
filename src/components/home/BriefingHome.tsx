@@ -219,7 +219,10 @@ export function BriefingHome({
   onOpenReceipt?: (id: string) => void
 } = {}) {
   return (
-    <div className="flex h-full flex-col px-8 pt-[108px]">
+    // 136px top: the chrome band above (trio pill / drawer handle)
+    // bottoms out ~94px into the frame — the briefing needs clear air
+    // under it, not a near-collision with the atom.
+    <div className="flex h-full flex-col px-8 pt-[136px]">
       {/* The atom — the brand breathing where the eyebrow would sit. */}
       <motion.div {...spoken(0)}>
         <BriefAtom />

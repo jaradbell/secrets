@@ -181,17 +181,6 @@ const PROTOTYPES: {
     render: () => <MoodboardHome />,
   },
   {
-    // Projects as a card grid, plus the navigation model underneath:
-    // grid → project home → conversation, with back as history (a stack —
-    // every chevron pops one screen, returning wherever you came from).
-    // A new project's floor fans the template deck behind the composer.
-    id: 'project-grid',
-    tag: '5B',
-    label: 'Project Grid',
-    ambient: 'composer',
-    render: () => <ProjectGridHome />,
-  },
-  {
     // Three rooms under one segmented pill — Todo (the board), Do (the
     // Assistant conversation, seated center as the implicit home) and
     // Decide (where open calls gather). Starting a conversation doesn't

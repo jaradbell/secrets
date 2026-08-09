@@ -63,16 +63,19 @@ const AUX_GAP = 16
 function AuxButton({
   side,
   label,
+  onTap,
   children,
 }: {
   side: 'left' | 'right'
   label: string
+  onTap?: () => void
   children: ReactNode
 }) {
   return (
     <motion.button
       type="button"
       aria-label={label}
+      onClick={onTap}
       className="absolute top-1/2 flex items-center justify-center rounded-full bg-[#17141b] shadow-[0_10px_26px_-10px_rgba(20,16,28,0.55)] outline-none"
       style={{
         width: AUX_SIZE,
@@ -254,6 +257,7 @@ export function VoiceControl({
   hideHintWhenFocused = false,
   dockHint,
   dockAux = false,
+  onPlus,
   suggestions,
   onUtterance,
 }: {
@@ -274,6 +278,9 @@ export function VoiceControl({
       circles in the orb's material. They stand down whenever the dock
       leaves plain-orb shape (pill morph, inline dock, trip file). */
   dockAux?: boolean
+  /** What the + flank does (5A raises the board's composer). Omitted,
+      the disc is furniture — 5E's is. */
+  onPlus?: () => void
   /** Opt-in inline dock: while a details sheet has focus, the orb morphs
       into a compact "Follow-up" pill docked right. A tap glides it left and
       deals these chips out of its wake (hold still pours into listening);
@@ -680,7 +687,7 @@ export function VoiceControl({
             the pill morph and inline dock keep their stage to themselves. */}
         <AnimatePresence>
           {dockAux && !isPill && !inline && !tripOpen && (
-            <AuxButton key="aux-plus" side="left" label="New">
+            <AuxButton key="aux-plus" side="left" label="New" onTap={onPlus}>
               <PlusGlyph />
             </AuxButton>
           )}

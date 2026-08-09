@@ -37,6 +37,11 @@ const nextTopZ = () => ++TOP_Z
     the board with their tilt exaggerated. */
 const UnpinContext = createContext(false)
 
+/** The notch's tidy verb — true and every artifact squares up: tilts
+    glide to zero and the idle drift holds still. The collage becomes a
+    neat board at attention; flip it back and the mess breathes again. */
+const TidyContext = createContext(false)
+
 /* ── Focus — lift any artifact off the board ──────────────────────────── */
 
 /** Where the tapped artifact was sitting (frame coordinates, unrotated
@@ -339,6 +344,7 @@ function Artifact({
   children: ReactNode
 }) {
   const unpinning = useContext(UnpinContext)
+  const tidied = useContext(TidyContext)
   const focusCtx = useContext(FocusContext)
   const rootRef = useRef<HTMLDivElement>(null)
   // A flick shouldn't also count as a tap — same guard as the card stack.
@@ -435,8 +441,9 @@ function Artifact({
             : tucking
               ? // The tuck — a soft press into the pile; the z restore
                 // fires at the trough, hidden inside the dip.
-                { opacity: 1, scale: [1, 0.955, 1], y: 0, rotate }
-              : { opacity: 1, scale: 1, y: 0, rotate }
+                { opacity: 1, scale: [1, 0.955, 1], y: 0, rotate: tidied ? 0 : rotate }
+              : // Tidied, every tilt glides to zero — pins at attention.
+                { opacity: 1, scale: 1, y: 0, rotate: tidied ? 0 : rotate }
         }
         transition={
           unpinning
@@ -447,13 +454,22 @@ function Artifact({
         }
       >
         <motion.div
-          animate={{ y: [0, drift * -4, 0], rotate: [0, drift * 1.2, 0] }}
-          transition={{
-            duration: 5.4 + Math.abs(drift) * 1.6,
-            delay: delay + 0.6,
-            repeat: Infinity,
-            ease: 'easeInOut',
-          }}
+          // Tidy also stills the breathing — a neat board holds its pose.
+          animate={
+            tidied
+              ? { y: 0, rotate: 0 }
+              : { y: [0, drift * -4, 0], rotate: [0, drift * 1.2, 0] }
+          }
+          transition={
+            tidied
+              ? { duration: 0.4, ease: EASE }
+              : {
+                  duration: 5.4 + Math.abs(drift) * 1.6,
+                  delay: delay + 0.6,
+                  repeat: Infinity,
+                  ease: 'easeInOut',
+                }
+          }
         >
           {children}
         </motion.div>
@@ -1567,7 +1583,7 @@ function GalleryFocus({
             'linear-gradient(to bottom, rgba(250,250,250,0.96) 0%, rgba(250,250,250,0.7) 55%, rgba(250,250,250,0) 100%)',
         }}
         initial={{ opacity: 0 }}
-        animate={{ opacity: landed ? 1 : 0 }}
+        animate={{ opacity: landed && !closing ? 1 : 0 }}
         exit={{ opacity: 0, transition: { duration: 0.2 } }}
         transition={{ duration: 0.25, ease: EASE }}
       />
@@ -1579,7 +1595,7 @@ function GalleryFocus({
             'linear-gradient(to top, rgba(250,250,250,0.96) 0%, rgba(250,250,250,0.85) 40%, rgba(250,250,250,0) 100%)',
         }}
         initial={{ opacity: 0 }}
-        animate={{ opacity: landed ? 1 : 0 }}
+        animate={{ opacity: landed && !closing ? 1 : 0 }}
         exit={{ opacity: 0, transition: { duration: 0.2 } }}
         transition={{ duration: 0.25, ease: EASE }}
       />
@@ -1589,11 +1605,15 @@ function GalleryFocus({
       <motion.button
         type="button"
         aria-label="Close gallery"
-        onClick={onClose}
+        onClick={close}
         className="absolute right-5 z-20 flex size-9 items-center justify-center rounded-full bg-[#131117] text-white shadow-[0_10px_26px_-8px_rgba(20,16,28,0.5)] outline-none transition-transform duration-150 ease-out active:scale-90"
         style={{ top: 'max(var(--safe-top), 18px)' }}
         initial={{ opacity: 0, scale: 0.7 }}
-        animate={{ opacity: 1, scale: 1, transition: { delay: 0.35, duration: 0.25, ease: EASE } }}
+        animate={
+          closing
+            ? { opacity: 0, scale: 0.8, transition: { duration: 0.18, ease: EASE } }
+            : { opacity: 1, scale: 1, transition: { delay: 0.35, duration: 0.25, ease: EASE } }
+        }
         exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.15 } }}
       >
         <svg
@@ -1626,10 +1646,11 @@ function GalleryFocus({
   )
 }
 
-/** Scrim + clone, portaled over the whole frame (above the dock). The
-    board keeps breathing beneath, dimmed to background. The gallery is
-    the exception — it rides its own screen-layer portal so the dock
-    stays on top. */
+/** Scrim + clone on the screen layer, *under* the dock (z-35 vs z-40)
+    like the gallery and the composer — the voice orb and its hint stay
+    present and live while a piece is isolated, so the assistant is
+    always one hold away. The board keeps breathing beneath, dimmed to
+    background. */
 function FocusLayer({
   focus,
   onClose,
@@ -1643,7 +1664,7 @@ function FocusLayer({
   return (
     <AnimatePresence onExitComplete={onGone}>
       {focus && (
-        <div key={focus.id} className="absolute inset-0 z-50">
+        <div key={focus.id} className="absolute inset-0 z-[35]">
           <motion.div
             className="absolute inset-0 bg-[rgba(250,250,250,0.82)] backdrop-blur-[10px]"
             initial={{ opacity: 0 }}
@@ -1846,6 +1867,8 @@ export function ProjectsMoodboard({
   out = false,
   added = [],
   query = '',
+  filter = null,
+  tidy = false,
   composing = false,
   onCompose,
   spoken,
@@ -1858,6 +1881,11 @@ export function ProjectsMoodboard({
   /** The notch's search — non-matching clusters recede (dim + blur)
       rather than unmount: pins stay pinned, they just step back. */
   query?: string
+  /** The find sheet's one-tap lens — same recede verdict as the query,
+      no typing: 'needs-me' (open tasks), 'booked', 'planning'. */
+  filter?: string | null
+  /** The notch's tidy — every artifact squares up and holds still. */
+  tidy?: boolean
   /** True while the notch's plus has the new-note composer up. */
   composing?: boolean
   /** The composer's verdict — a pin to keep, or null (nothing written). */
@@ -1897,12 +1925,24 @@ export function ProjectsMoodboard({
       [projectId]: [...(s[projectId] ?? []), { id: `new-${Date.now()}`, label, done: false }],
     }))
 
-  // The search verdict, per cluster — a project answers with its title
-  // or any of its (live) tasks.
+  // The find verdict, per cluster — the lens asks a one-tap question
+  // (any open tasks? any bookings yet?), the query asks by name; a
+  // project has to answer both to stay lit.
   const q = query.trim().toLowerCase()
   const recedes = (p: BoardProject) => {
-    if (!q) return false
     const tasks = tasksById[p.id] ?? p.tasks
+    if (filter) {
+      const pass =
+        filter === 'needs-me'
+          ? tasks.some((t) => !t.done)
+          : filter === 'booked'
+            ? p.stickers.length > 0
+            : filter === 'planning'
+              ? p.stickers.length === 0
+              : true
+      if (!pass) return true
+    }
+    if (!q) return false
     return !(
       p.title.toLowerCase().includes(q) ||
       tasks.some((t) => t.label.toLowerCase().includes(q))
@@ -1940,18 +1980,14 @@ export function ProjectsMoodboard({
     setFocus({ id, payload, from, frame: { w: vp.clientWidth, h: vp.clientHeight } })
     setHiddenId(id)
   }
-  // Gallery focuses split off to their own layer (under the dock);
-  // everything else flies on the viewport focus layer above it.
+  // Gallery focuses split off to their own layer; both layers ride the
+  // screen layer *under* the dock (z-35 vs z-40), so the composer
+  // affordance — the voice orb and its hint — stays present and live
+  // through every isolation. The composer sheet shares the same slot.
   const galleryProjectId = focus?.payload.kind === 'gallery' ? focus.payload.projectId : null
 
-  // Portal targets. The focus layer goes to the viewport — it covers the
-  // whole frame, dock included. The composer goes to the screen layer
-  // instead, whose stacking context lets it slide *under* the dock
-  // (z-35 vs z-40) so the voice orb stays live while composing.
-  const [viewport, setViewport] = useState<HTMLElement | null>(null)
   const [screenLayer, setScreenLayer] = useState<HTMLElement | null>(null)
   useEffect(() => {
-    setViewport(document.getElementById('app-viewport'))
     setScreenLayer(document.getElementById('app-screen'))
   }, [])
 
@@ -1965,6 +2001,7 @@ export function ProjectsMoodboard({
 
   return (
     <UnpinContext.Provider value={out}>
+    <TidyContext.Provider value={tidy}>
     <TasksContext.Provider value={{ projects, tasksById, toggle, add }}>
     <FocusContext.Provider value={{ hiddenId, open: openFocus }}>
       <div className="relative h-full w-full">
@@ -2015,15 +2052,17 @@ export function ProjectsMoodboard({
       </div>
       </div>
 
-      {/* The focus layer — over everything, dock included. */}
-      {viewport &&
+      {/* The focus layer — on the screen layer, *under* the dock, so
+          the composer affordance (orb + hint) stays present and live
+          while a piece is isolated. */}
+      {screenLayer &&
         createPortal(
           <FocusLayer
             focus={galleryProjectId ? null : focus}
             onClose={() => setFocus(null)}
             onGone={() => setHiddenId(null)}
           />,
-          viewport,
+          screenLayer,
         )}
 
       {/* The gallery — on the screen layer, *under* the dock, so the
@@ -2062,6 +2101,7 @@ export function ProjectsMoodboard({
         )}
     </FocusContext.Provider>
     </TasksContext.Provider>
+    </TidyContext.Provider>
     </UnpinContext.Provider>
   )
 }

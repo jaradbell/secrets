@@ -50,7 +50,7 @@ export function ConversationHeader({ title }: { title: string }) {
         aria-label={`Conversation: ${title}`}
         className="flex items-center gap-0.5 rounded-[24px] border border-white bg-[rgba(250,250,250,0.7)] py-[9px] pr-2 pl-3 shadow-[0px_2px_40px_0px_rgba(0,0,0,0.1)] outline-none backdrop-blur-[12px] transition-transform duration-200 ease-out active:scale-[0.97]"
       >
-        <span className="w-[136px] overflow-hidden text-left text-[12px] font-medium tracking-[0.12px] text-ellipsis whitespace-nowrap text-[#171717]">
+        <span className="max-w-[176px] overflow-hidden text-left text-[12px] font-medium tracking-[0.12px] text-ellipsis whitespace-nowrap text-[#171717]">
           {title}
         </span>
         {/* Receipts badge — where the conversation's receipts will collect. */}

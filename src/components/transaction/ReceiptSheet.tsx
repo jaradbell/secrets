@@ -402,6 +402,40 @@ const SHEETS: Record<string, SheetConfig> = {
     actions: ['Track ride', 'Contact driver', 'Share trip status', 'Get help from Uber'],
     booked: 'Booked in this conversation · Jul 18',
   },
+  // The wallet's cross-conversation artifact — booked in a different
+  // thread than the Sisters trip, which its provenance line says plainly.
+  game: {
+    hero: (
+      <HeroShell
+        background="linear-gradient(160deg, #12275C 0%, #1D428A 60%, #2A5CC4 130%)"
+        provider={{ icon: '/providers/ticketmaster.png', name: 'Ticketmaster' }}
+        status="Confirmed"
+        title="Warriors vs Lakers"
+        sub="Chase Center · Sat, Jul 25 · 7:30 PM"
+      />
+    ),
+    live: (
+      <MomentLive
+        headline="Doors open 6:00 PM"
+        sub="Saturday, Jul 25 · tip-off 7:30 PM"
+        note="Section 112 · Row 14 · Seats 5–6"
+      />
+    ),
+    details: [
+      { l: 'Section', v: '112' },
+      { l: 'Row · Seats', v: '14 · 5–6' },
+      { l: 'Confirmation', v: 'TM-448210' },
+      { l: 'Entry', v: 'Gate B · mobile only' },
+      { l: 'Payment', v: 'Apple Pay ·· 4821 — $312.40' },
+    ],
+    scannable: {
+      qr: '/receipts/qr-ticketmaster.svg',
+      code: 'TM-448210',
+      caption: 'Scan at the gate',
+    },
+    actions: ['Transfer tickets', 'Add to Apple Wallet', 'Get help from Ticketmaster'],
+    booked: 'Booked in "Warriors vs Lakers" · Jul 8',
+  },
 }
 
 /* ── The sheet ────────────────────────────────────────────────────────── */
