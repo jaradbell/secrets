@@ -70,7 +70,10 @@ function StarRow({
 /** Blue gradient progress ring with the 0–100 fit score (light surface). */
 function MatchScore() {
   return (
-    <div className="flex flex-col items-center">
+    // justify-between against the stretched row: ring tops out with the
+    // title line, label bottoms out with the rating row, so the score
+    // column matches the text block's height.
+    <div className="flex flex-col items-center justify-between self-stretch">
       <div className="relative size-10">
         <img
           src="/details/ring-outer.svg"
@@ -88,7 +91,7 @@ function MatchScore() {
           88
         </p>
       </div>
-      <p className="mt-2.5 text-[12px] font-medium tracking-[0.005em] text-ink">Match Score</p>
+      <p className="text-[12px] leading-4 font-medium tracking-[0.005em] text-ink">Match Score</p>
     </div>
   )
 }
@@ -329,8 +332,9 @@ export function PlaceDetailsView({
           </div>
 
           <motion.div {...FADE}>
-            {/* Lockup + match score — below the image on the light surface. */}
-            <div className="mt-5 flex items-end justify-between px-4">
+            {/* Lockup + match score — below the image on the light surface.
+                items-stretch so the score column adopts the lockup's height. */}
+            <div className="mt-5 flex items-stretch justify-between px-4">
               <div>
                 <p className="text-[24px] font-medium leading-[1.1] text-ink">{place.name}</p>
                 <p className="mt-1 text-[14px] leading-[18px] text-ink-secondary">

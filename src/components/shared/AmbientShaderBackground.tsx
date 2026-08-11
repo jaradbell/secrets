@@ -392,6 +392,7 @@ export function AmbientShaderBackground({
   veil = true,
   focus,
   pour = false,
+  palette,
 }: {
   veil?: boolean
   /** Gathers the mesh around a point: the colour blooms migrate toward it
@@ -406,8 +407,16 @@ export function AmbientShaderBackground({
       glow along the bottom — the composer-band state. Eases in/out on
       change, playing the journey both ways. */
   pour?: boolean
+  /** Overrides the theme's bloom colours (0..1 sRGB triples, first entry
+      is the base the field drains toward; up to 8). Read once at mount —
+      brand-tinted instances (checkout's provider wash) mount their own
+      canvas rather than repainting the shell's. */
+  palette?: [number, number, number][]
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  // Read once during GL setup — stable against callers passing literals.
+  const paletteRef = useRef(palette)
+  paletteRef.current = palette
   // Read per-frame inside the render loop without re-running the GL setup.
   const focusRef = useRef(focus)
   focusRef.current = focus
@@ -473,9 +482,10 @@ export function AmbientShaderBackground({
     const uCursor = u('u_cursor')
     const uAura = u('u_aura')
 
-    // u_colors[8] — first four are the theme ramp, the rest zeroed.
+    // u_colors[8] — the ramp (theme or caller palette), the rest zeroed.
+    const colors = paletteRef.current ?? THEME_COLORS
     const colorData = new Float32Array(24)
-    THEME_COLORS.forEach((c, i) => {
+    colors.forEach((c, i) => {
       colorData[i * 3] = c[0]
       colorData[i * 3 + 1] = c[1]
       colorData[i * 3 + 2] = c[2]
@@ -503,7 +513,7 @@ export function AmbientShaderBackground({
 
     const draw = (seconds: number) => {
       // u_scene = vec4(width, height, seconds * 0.73, colorCount)
-      gl.uniform4f(uScene, vw, vh, seconds * 0.73, THEME_COLORS.length)
+      gl.uniform4f(uScene, vw, vh, seconds * 0.73, colors.length)
       gl.drawArrays(gl.TRIANGLES, 0, 3)
     }
 

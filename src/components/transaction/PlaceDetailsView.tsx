@@ -10,7 +10,8 @@
  */
 import { motion } from 'framer-motion'
 import { useEffect, useRef } from 'react'
-import type { RankedResult } from './data'
+import { matchRankOf, type RankedResult } from './data'
+import { MATCH_GRADIENT, MatchRing, useMatchStyle } from './MatchRing'
 import { useReservationFlow } from './reservationFlow'
 
 const EASE = [0.32, 0.72, 0, 1] as const
@@ -66,28 +67,34 @@ function StarRow({
   )
 }
 
-/** Blue gradient progress ring with the 0–100 fit score. */
-function MatchScore() {
+/** The large fit-ring variant — monochrome on the hero's dark base: a
+    white arc over a white/20 track, carrying the place's own score. Under
+    the rank styles the label picks up the standing ("#1 Match Score"),
+    reinforcing what the map and list already carry; the gradient style also
+    strokes the arc white-into-blue from its tail. */
+function MatchScore({ score, rank }: { score: number; rank: number }) {
+  const matchStyle = useMatchStyle()
+  const ranked = matchStyle !== 'score'
   return (
-    <div className="flex flex-col items-center">
-      <div className="relative size-10">
-        <img
-          src="/details/ring-outer.svg"
-          alt=""
-          draggable={false}
-          className="absolute inset-[-10%] block size-[120%] max-w-none"
-        />
-        <img
-          src="/details/ring-inner.svg"
-          alt=""
-          draggable={false}
-          className="absolute inset-[-10%] block size-[120%] max-w-none"
-        />
-        <p className="absolute inset-0 flex items-center justify-center text-[18px] leading-none text-white/95">
-          88
-        </p>
-      </div>
-      <p className="mt-2.5 text-[12px] font-medium tracking-[0.005em] text-white">Match Score</p>
+    // justify-between against the stretched row: the ring's top lines up
+    // with the title's cap line and the label's baseline with the rating
+    // row, so the score column reads as the same height as the text block.
+    <div className="flex flex-col items-center justify-between self-stretch">
+      <MatchRing
+        score={score}
+        size={50}
+        stroke={4}
+        color="rgba(255,255,255,0.95)"
+        track="rgba(255,255,255,0.2)"
+        gradient={matchStyle === 'gradient' ? MATCH_GRADIENT : undefined}
+      >
+        <span className="leading-none text-white/95" style={{ fontSize: 18 }}>
+          {score}
+        </span>
+      </MatchRing>
+      <p className="text-[12px] leading-4 font-medium tracking-[0.005em] text-white">
+        {ranked ? `#${rank} Match Score` : 'Match Score'}
+      </p>
     </div>
   )
 }
@@ -125,7 +132,7 @@ function GetReservationChip({ place }: { place: string }) {
       onPointerCancel={() => {
         pressedAt.current = 0
       }}
-      className="flex h-11 shrink-0 items-center rounded-full border border-[#d8dce0] bg-white py-2.5 pl-3.5 pr-4 text-[14px] leading-[18px] text-[#0a0a0a] outline-none transition-transform duration-200 ease-out active:scale-[0.97] touch-none select-none"
+      className="flex h-11 shrink-0 items-center rounded-full bg-ink py-2.5 pl-3.5 pr-4 text-[14px] leading-[18px] text-white outline-none transition-transform duration-200 ease-out active:scale-[0.97] touch-none select-none"
     >
       Get reservation
     </button>
@@ -275,8 +282,9 @@ export function PlaceDetailsView({
               <img src="/details/chevron-left.svg" alt="" draggable={false} className="size-5" />
             </button>
 
-            {/* Title block + match score */}
-            <div className="absolute inset-x-5 bottom-5 flex items-end justify-between">
+            {/* Title block + match score — items-stretch so the score
+                column adopts the text block's exact height. */}
+            <div className="absolute inset-x-5 bottom-5 flex items-stretch justify-between">
               <div>
                 <p className="text-[24px] font-medium leading-[1.1] text-white">{place.name}</p>
                 <p className="mt-1 text-[14px] leading-[18px] text-white/60">
@@ -295,13 +303,13 @@ export function PlaceDetailsView({
                   </p>
                 </div>
               </div>
-              <MatchScore />
+              <MatchScore score={place.match} rank={matchRankOf(place.id)} />
             </div>
           </motion.div>
         </div>
 
         <motion.div {...FADE}>
-          {/* Action chips — lead action in brand blue, rest quiet pills. */}
+          {/* Action chips — one uniform row of black pills. */}
           <div
             className="mt-[18px] w-full overflow-x-auto"
             style={{ scrollbarWidth: 'none' }}
@@ -309,24 +317,16 @@ export function PlaceDetailsView({
             <div className="flex w-max items-center gap-2 px-5">
               <button
                 type="button"
-                className="flex h-11 shrink-0 items-center gap-2 rounded-full bg-[#124efd] py-2.5 pl-1.5 pr-3.5 outline-none transition-transform duration-200 ease-out active:scale-[0.97]"
+                className="flex h-11 shrink-0 items-center rounded-full bg-ink py-2.5 pl-3.5 pr-4 text-[14px] leading-[18px] text-white outline-none transition-transform duration-200 ease-out active:scale-[0.97]"
               >
-                <span className="flex size-8 items-center justify-center overflow-hidden rounded-full border border-white bg-white">
-                  <img
-                    src="/details/directions-map.png"
-                    alt=""
-                    draggable={false}
-                    className="h-4 w-auto"
-                  />
-                </span>
-                <span className="text-[14px] leading-[18px] text-white">Directions</span>
+                Directions
               </button>
               <GetReservationChip place={place.name} />
               {CHIP_ACTIONS.map((label) => (
                 <button
                   key={label}
                   type="button"
-                  className="flex h-11 shrink-0 items-center rounded-full border border-[#d8dce0] bg-white py-2.5 pl-3.5 pr-4 text-[14px] leading-[18px] text-[#0a0a0a] outline-none transition-transform duration-200 ease-out active:scale-[0.97]"
+                  className="flex h-11 shrink-0 items-center rounded-full bg-ink py-2.5 pl-3.5 pr-4 text-[14px] leading-[18px] text-white outline-none transition-transform duration-200 ease-out active:scale-[0.97]"
                 >
                   {label}
                 </button>

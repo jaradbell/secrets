@@ -260,6 +260,7 @@ export function VoiceControl({
   onPlus,
   suggestions,
   onUtterance,
+  simulatedFollowUps,
 }: {
   idleContent?: ReactNode
   followUp?: FollowUpMode
@@ -290,6 +291,11 @@ export function VoiceControl({
       there to consume it — the host can act on the words (5B's grid births
       a project from them; its draft floor takes a name). */
   onUtterance?: (transcript: string) => void
+  /** Demo script for follow-up holds once the draft's slots are complete:
+      each press-and-hold speaks the next line (edits, and eventually the
+      booking verb) instead of confirming outright. Exhausted, a hold falls
+      back to the plain confirm. Resets with each new intent. */
+  simulatedFollowUps?: string[]
 }) {
   const { status, transcript, response, error, levelRef, start, finish } = useVoiceInput()
   const meta = STATE_META[status]
@@ -417,18 +423,39 @@ export function VoiceControl({
   // voice session. During follow-up, the utterance fills whatever slots are
   // still missing (real recognition, when it works, refines via the parse
   // effect).
+  // The demo script's cursor — each complete-slots hold speaks the next
+  // line. A fresh intent rewinds it so every run of the demo plays whole.
+  const followUpScriptIdx = useRef(0)
+  useEffect(() => {
+    followUpScriptIdx.current = 0
+  }, [flow?.beginCount])
+
   const simulateUtterance = () => {
     if (!flow) return
     if (flow.stage === 'none') {
       if (flow.focusedPlace) flow.begin({ time: '7:30 PM', party: 2 }, flow.focusedPlace)
     } else if (flow.stage === 'followUp') {
-      const missing: { time?: string; party?: number } = {}
-      if (!flow.slots.time) missing.time = '7:30 PM'
-      if (!flow.slots.party) missing.party = 2
-      if (missing.time || missing.party) flow.fillSlots(missing)
-      // Slots already complete and nothing was actually heard — treat the
-      // hold as the "book it". With a real transcript, defer to the parse
-      // effect so "make it Sunday" edits instead of booking.
+      // The simulated answer travels as words through the same door real
+      // speech uses — hosts that render the exchange as a thread (2C) see
+      // it as a user turn, and the parser fills the slots from it.
+      if (!flow.slots.time && !flow.slots.party) {
+        flow.fillFromUtterance('Make it 7:30 PM for 2')
+      } else if (!flow.slots.time) {
+        flow.fillFromUtterance('Make it 7:30 PM')
+      } else if (!flow.slots.party) {
+        flow.fillFromUtterance('Make it for 2 people')
+      }
+      // Slots complete: with a demo script, each hold speaks its next line
+      // (voice edits, then the line carrying the booking verb commits).
+      else if (
+        simulatedFollowUps &&
+        followUpScriptIdx.current < simulatedFollowUps.length
+      ) {
+        flow.fillFromUtterance(simulatedFollowUps[followUpScriptIdx.current++])
+      }
+      // No script left and nothing was actually heard — treat the hold as
+      // the "book it". With a real transcript, defer to the parse effect
+      // so "make it Sunday" edits instead of booking.
       else if (!transcript.trim()) flow.confirm()
     }
   }
@@ -483,8 +510,10 @@ export function VoiceControl({
 
   // NBSP keeps the text slot's height (and the orb's position) stable.
   const restingHint =
-    hideHintWhenFocused && flow?.focusedPlace && status === 'idle' && !error
-      ? '\u00A0' // details sheet has focus — its affordances carry the moment
+    ((hideHintWhenFocused && flow?.focusedPlace) || flow?.hintSuppressed) &&
+    status === 'idle' &&
+    !error
+      ? '\u00A0' // an open surface carries the moment — drop the hint
       : (error ?? meta.label)
   const label =
     stage === 'followUp'
@@ -561,9 +590,11 @@ export function VoiceControl({
       {/* Protective scrim — a clean fade to the sheet color behind the dock
           and its support text, so the copy never collides with content
           scrolled beneath. Above the details sheet (z-30), below the dock
-          (z-40). */}
+          (z-40). Stands down while the trip file holds the frame — its
+          mesh floor is the backdrop there, and a white pool over it reads
+          as a stray scrim. */}
       <AnimatePresence>
-        {(stage === 'followUp' || stage === 'booking') && (
+        {(stage === 'followUp' || stage === 'booking') && !tripOpen && (
           <motion.div
             aria-hidden
             className="pointer-events-none absolute inset-x-0 bottom-0 z-[35]"

@@ -9,6 +9,7 @@ import { ReceiptGalleryConversation } from '../components/transaction/ReceiptGal
 import { ReceiptGalleryExpressive } from '../components/transaction/ReceiptGalleryExpressive'
 import { ReceiptGalleryTicket } from '../components/transaction/ReceiptGalleryTicket'
 import { ReceiptGalleryWallet } from '../components/transaction/ReceiptGalleryWallet'
+import { MatchStyleProvider } from '../components/transaction/MatchRing'
 import { ReservationProvider } from '../components/transaction/reservationFlow'
 import { TransactionView } from '../components/transaction/TransactionView'
 import { EmptyState } from '../components/voice/EmptyState'
@@ -84,13 +85,24 @@ const PROTOTYPES: {
     label: 'Return to Conversation',
     ambient: 'composer',
     render: () => (
-      <ReservationProvider>
-        <VoiceControl
-          followUp="none"
-          receipt={null}
-          idleContent={<TransactionView variant="2c" />}
-        />
-      </ReservationProvider>
+      // requireConfirm: even a full-context ask lands on the draft object —
+      // the summary card carries the explicit go. Carries 7E's match
+      // language: rank circles + percentages instead of bare 0–100 scores.
+      <MatchStyleProvider style="number-chip">
+        <ReservationProvider requireConfirm>
+          {/* Default receipt: booking blooms into the full-screen
+              confirmation, and Done lands back on the thread where the
+              resolved turn holds the final ticket. */}
+          <VoiceControl
+            followUp="none"
+            idleContent={<TransactionView variant="2c" />}
+            // The voice-edit demo: once the draft is complete, each hold on
+            // the orb speaks the next line — an edit first, then the line
+            // carrying the booking verb commits the reservation.
+            simulatedFollowUps={['Make it 8:00 PM instead', 'Party of 4 \u2014 book it']}
+          />
+        </ReservationProvider>
+      </MatchStyleProvider>
     ),
   },
   {
@@ -245,6 +257,107 @@ const PROTOTYPES: {
       </div>
     ),
   },
+  // Match score explorations — the 2D checkout flow duplicated three ways.
+  // The flow, data, and components are shared; MatchStyleProvider swaps how
+  // the assistant's match number reads on the map POIs, the compare list,
+  // and the details view's ring.
+  {
+    // The score language as it ships in 2D: 0–100 chips and the white ring.
+    id: 'match-scores-7a',
+    tag: '7A',
+    label: 'Current',
+    ambient: 'composer',
+    render: () => (
+      <MatchStyleProvider style="score">
+        <ReservationProvider>
+          <VoiceControl
+            followUp="none"
+            receipt={null}
+            idleContent={<TransactionView variant="2d" />}
+          />
+        </ReservationProvider>
+      </MatchStyleProvider>
+    ),
+  },
+  {
+    // Standing instead of score: POIs and rows carry 1, 2, 3… and the
+    // details ring's label picks up the rank ("#1 Match Score").
+    id: 'match-scores-7b',
+    tag: '7B',
+    label: 'Rankings',
+    ambient: 'composer',
+    render: () => (
+      <MatchStyleProvider style="rank">
+        <ReservationProvider>
+          <VoiceControl
+            followUp="none"
+            receipt={null}
+            idleContent={<TransactionView variant="2d" />}
+          />
+        </ReservationProvider>
+      </MatchStyleProvider>
+    ),
+  },
+  {
+    // Builds on 7B: circles take a solid hue sampled off the score
+    // spectrum — blue → teal → green as the match climbs (weak matches go
+    // colorless) — and the details ring strokes the full spectrum along
+    // its arc.
+    id: 'match-scores-7c',
+    tag: '7C',
+    label: 'Spectrum',
+    ambient: 'composer',
+    render: () => (
+      <MatchStyleProvider style="gradient">
+        <ReservationProvider>
+          <VoiceControl
+            followUp="none"
+            receipt={null}
+            idleContent={<TransactionView variant="2d" />}
+          />
+        </ReservationProvider>
+      </MatchStyleProvider>
+    ),
+  },
+  {
+    // The standing rides the row's photo as a corner badge (the
+    // roommate-list motif) — the right rail stands down; map pins keep
+    // the 7B rank circles.
+    id: 'match-scores-7d',
+    tag: '7D',
+    label: 'Photo Rank',
+    ambient: 'composer',
+    render: () => (
+      <MatchStyleProvider style="photo-rank">
+        <ReservationProvider>
+          <VoiceControl
+            followUp="none"
+            receipt={null}
+            idleContent={<TransactionView variant="2d" />}
+          />
+        </ReservationProvider>
+      </MatchStyleProvider>
+    ),
+  },
+  {
+    // A bare rank numeral with the match percentage chipped beneath it in
+    // the list; map POIs go simple white pills carrying both numbers.
+    id: 'match-scores-7e',
+    tag: '7E',
+    label: 'Number + %',
+    ambient: 'composer',
+    render: () => (
+      <MatchStyleProvider style="number-chip">
+        <ReservationProvider>
+          <VoiceControl
+            followUp="none"
+            receipt={null}
+            idleContent={<TransactionView variant="2d" />}
+          />
+        </ReservationProvider>
+      </MatchStyleProvider>
+    ),
+  },
 ]
 
 /** Tag-6 stage: tap anywhere to kill the loader and watch it be reborn. */
@@ -322,6 +435,9 @@ export function App() {
                 )}
                 {p.tag === '6A' && (
                   <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">6. Goo Loader</p>
+                )}
+                {p.tag === '7A' && (
+                  <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">7. Match Scores</p>
                 )}
                 <a
                   href={`#${p.id}`}

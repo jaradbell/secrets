@@ -29,15 +29,29 @@ import {
 export type ReservationSlots = { date?: string; time?: string; party?: number }
 export type ReservationStage = 'none' | 'followUp' | 'booking' | 'receipt'
 
+/** A conversational input (spoken or typed) that reached the flow — hosts
+    that render the exchange as a thread show these as user bubbles. */
+export type ReservationUtterance = { id: number; text: string }
+
 type ReservationFlow = {
   stage: ReservationStage
   slots: ReservationSlots
   /** Place being booked, for the receipt. */
   place: string | null
+  /** Conversational inputs consumed by this flow, in order. */
+  utterances: ReservationUtterance[]
+  /** Bumped every begin() — hosts key new intents off this, since begin can
+      arrive mid-follow-up (a new place) or after a receipt (booking again)
+      without the stage ever passing through 'none'. */
+  beginCount: number
   /** Place whose details sheet is open — spoken intents from the resting
       orb attach to it. Null while browsing results. */
   focusedPlace: string | null
   setFocusedPlace: (place: string | null) => void
+  /** True while a surface (e.g. the compare map) wants the orb's resting
+      "Hold or tap to speak" hint dropped — the orb itself stays live. */
+  hintSuppressed: boolean
+  setHintSuppressed: (v: boolean) => void
   /** Open the flow with whatever context arrived with the intent. */
   begin: (slots?: ReservationSlots, place?: string) => void
   /** Merge slot values (from popovers or parsed speech). */
@@ -114,12 +128,25 @@ export function parseReservationUtterance(text: string): ReservationSlots {
   return slots
 }
 
-export function ReservationProvider({ children }: { children: ReactNode }) {
+export function ReservationProvider({
+  children,
+  requireConfirm = false,
+}: {
+  children: ReactNode
+  /** A full-context intent ("book it for 2 at 7:30") normally skips straight
+      to booking. With requireConfirm the flow always lands on follow-up — the
+      draft object carries the explicit go (2C's summary-card pattern). */
+  requireConfirm?: boolean
+}) {
   const [stage, setStage] = useState<ReservationStage>('none')
   const [slots, setSlots] = useState<ReservationSlots>({})
   const [place, setPlace] = useState<string | null>(null)
+  const [utterances, setUtterances] = useState<ReservationUtterance[]>([])
+  const [beginCount, setBeginCount] = useState(0)
   const [focusedPlace, setFocusedPlace] = useState<string | null>(null)
+  const [hintSuppressed, setHintSuppressed] = useState(false)
   const timersRef = useRef<number[]>([])
+  const utteranceIdRef = useRef(0)
 
   useEffect(() => () => timersRef.current.forEach((id) => clearTimeout(id)), [])
 
@@ -131,11 +158,13 @@ export function ReservationProvider({ children }: { children: ReactNode }) {
   const begin = useCallback(
     (initial: ReservationSlots = {}, forPlace?: string) => {
       setSlots(initial)
+      setUtterances([])
+      setBeginCount((c) => c + 1)
       if (forPlace) setPlace(forPlace)
-      if (initial.time && initial.party) toBooking()
+      if (initial.time && initial.party && !requireConfirm) toBooking()
       else setStage('followUp')
     },
-    [toBooking],
+    [toBooking, requireConfirm],
   )
 
   const fillSlots = useCallback((partial: ReservationSlots) => {
@@ -148,6 +177,7 @@ export function ReservationProvider({ children }: { children: ReactNode }) {
     (text: string) => {
       const parsed = parseReservationUtterance(text)
       if (parsed.date || parsed.time || parsed.party) fillSlots(parsed)
+      setUtterances((u) => [...u, { id: ++utteranceIdRef.current, text }])
       // The booking verb commits — but only once the merged slots are
       // complete; "book it" with holes left is still just slot-filling talk.
       const next = { ...slots, ...parsed }
@@ -159,6 +189,7 @@ export function ReservationProvider({ children }: { children: ReactNode }) {
   const dismiss = useCallback(() => {
     setStage('none')
     setSlots({})
+    setUtterances([])
   }, [])
 
   return (
@@ -167,8 +198,12 @@ export function ReservationProvider({ children }: { children: ReactNode }) {
         stage,
         slots,
         place,
+        utterances,
+        beginCount,
         focusedPlace,
         setFocusedPlace,
+        hintSuppressed,
+        setHintSuppressed,
         begin,
         fillSlots,
         fillFromUtterance,

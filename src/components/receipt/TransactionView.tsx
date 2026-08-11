@@ -74,10 +74,13 @@ export function TransactionView() {
 
   // Portal target for the details overlay — resolved after mount (the frame
   // isn't in the DOM during the first render), then kept so AnimatePresence
-  // stays alive through the overlay's exit animation.
+  // stays alive through the overlay's exit animation. Overlays land on
+  // #app-screen (inside the screen's stacking context) so the dock's z-40
+  // orb stays above them; it shares the viewport's box at rest, so the
+  // morph-origin measurements are unchanged.
   const [viewport, setViewport] = useState<HTMLElement | null>(null)
   useEffect(() => {
-    setViewport(document.getElementById('app-viewport'))
+    setViewport(document.getElementById('app-screen'))
   }, [])
 
   // Measure the tapped card and its photo thumb so the details sheet can

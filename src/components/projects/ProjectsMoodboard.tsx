@@ -58,6 +58,8 @@ type FocusPayload =
   | { kind: 'chip'; text: string; color: string }
   // A provider mark is a booking — tapping it produces the receipt.
   | { kind: 'receipt'; icon: string; receipt: ReceiptContent }
+  // The faces chip — tapping it unfolds the project's roster + invite.
+  | { kind: 'people'; projectId: string }
 
 type Focus = {
   id: string
@@ -84,6 +86,13 @@ const TasksContext = createContext<{
   add: (projectId: string, label: string) => void
 }>({ projects: [], tasksById: {}, toggle: () => {}, add: () => {} })
 
+/** The rosters — live at the board (invites made in the focus card have
+    to survive it closing), read by the faces chips and the roster. */
+const PeopleContext = createContext<{
+  peopleById: Record<string, Person[]>
+  invite: (projectId: string, name: string) => void
+}>({ peopleById: {}, invite: () => {} })
+
 /* ── Data ─────────────────────────────────────────────────────────────── */
 
 type BoardTask = { id: string; label: string; done: boolean }
@@ -108,6 +117,17 @@ type BoardPhoto = {
     receipt's face on the board. */
 type BoardSticker = { icon: string; receipt: ReceiptContent }
 
+/** Someone on the board. Photo if we have one; otherwise a tinted
+    initial disc (fresh invites always start as initials). */
+type Person = {
+  id: string
+  name: string
+  avatar?: string
+  tint?: string
+  /** Owner · Can edit · Invited — the roster's right column. */
+  role: string
+}
+
 type BoardProject = {
   id: string
   title: string
@@ -124,6 +144,8 @@ type BoardProject = {
   /** The full photo roll — the cluster pins the first 2–3 as heroes,
       tapping any of them opens the whole thing. */
   gallery: BoardPhoto[]
+  /** Who's on the board — the faces chip wears the first few. */
+  people: Person[]
 }
 
 /** Note tints for freshly pinned projects — cycled so back-to-back pins
@@ -145,6 +167,7 @@ const pinnedProject = (pin: NewPin, i: number): BoardProject => ({
   stickers: [],
   tasks: pin.tasks,
   gallery: [],
+  people: [{ id: 'you', name: 'You', avatar: '/details/avatar-you.png', role: 'Owner' }],
 })
 
 const BOARD: BoardProject[] = [
@@ -196,7 +219,7 @@ const BOARD: BoardProject[] = [
     ],
     tasks: [
       { id: 'cake', label: 'Order the birthday cake', done: false },
-      { id: 'split', label: 'Split the hotel with Anna', done: false },
+      { id: 'split', label: 'Split the hotel with Morganne', done: false },
       { id: 'dinner', label: 'Dinner at Valette · 7:30', done: true },
       { id: 'flights', label: 'Book flights to SFO', done: true },
       { id: 'hotel', label: 'Book Hotel Healdsburg', done: true },
@@ -227,6 +250,11 @@ const BOARD: BoardProject[] = [
         source: 'Hotel Healdsburg · Jul 25 – 27 · booked on Expedia',
         provider: { name: 'Expedia', icon: '/providers/expedia.png' },
       },
+    ],
+    people: [
+      { id: 'you', name: 'You', avatar: '/details/avatar-you.png', role: 'Owner' },
+      { id: 'morganne', name: 'Morganne', avatar: '/details/avatar-2.png', role: 'Can edit' },
+      { id: 'kevin', name: 'Kevin', tint: '#DDE9F8', role: 'Can edit' },
     ],
   },
   {
@@ -274,6 +302,8 @@ const BOARD: BoardProject[] = [
         provider: { name: 'OpenTable', icon: '/providers/opentable.svg' },
       },
     ],
+    // Solo — no faces chip on the cluster; sharing starts from zero.
+    people: [{ id: 'you', name: 'You', avatar: '/details/avatar-you.png', role: 'Owner' }],
   },
   {
     id: 'kyoto',
@@ -295,6 +325,9 @@ const BOARD: BoardProject[] = [
         source: 'Saved while researching',
       },
     ],
+    // Just you so far — the roster's empty-ish state, with the invite
+    // row as its point.
+    people: [{ id: 'you', name: 'You', avatar: '/details/avatar-you.png', role: 'Owner' }],
     tasks: [
       { id: 'week', label: 'Pick the travel week', done: false },
       { id: 'ryokan', label: 'Shortlist ryokans in Gion', done: false },
@@ -512,6 +545,54 @@ function MetaChip({ children, color }: { children: string; color: string }) {
   )
 }
 
+/** One face — photo when we have it, tinted initial when we don't. */
+function PersonFace({ person, size }: { person: Person; size: number }) {
+  return person.avatar ? (
+    <img
+      src={person.avatar}
+      alt={person.name}
+      draggable={false}
+      className="shrink-0 rounded-full object-cover"
+      style={{ width: size, height: size }}
+    />
+  ) : (
+    <span
+      aria-label={person.name}
+      className="flex shrink-0 items-center justify-center rounded-full font-semibold text-ink/70"
+      style={{
+        width: size,
+        height: size,
+        background: person.tint ?? '#ECE9F1',
+        fontSize: Math.round(size * 0.42),
+      }}
+    >
+      {person.name.charAt(0).toUpperCase()}
+    </span>
+  )
+}
+
+/** The collaborators chip — a white pill wearing the first few faces,
+    pinned to the cluster like any other paper piece. Tap it and the
+    roster unfolds. */
+function FacesChip({ people }: { people: Person[] }) {
+  const shown = people.slice(0, 3)
+  const extra = people.length - shown.length
+  return (
+    <span className="flex items-center gap-1.5 rounded-full bg-white py-1.5 pr-3 pl-2 shadow-[0_8px_20px_-8px_rgba(20,16,28,0.3)]">
+      <span className="flex -space-x-2">
+        {shown.map((person) => (
+          <span key={person.id} className="rounded-full ring-2 ring-white">
+            <PersonFace person={person} size={22} />
+          </span>
+        ))}
+      </span>
+      {extra > 0 && (
+        <span className="text-[11px] font-semibold text-ink/55">+{extra}</span>
+      )}
+    </span>
+  )
+}
+
 /** Round provider sticker — the marks a project collects as it books. */
 function Sticker({ icon }: { icon: string }) {
   return (
@@ -721,6 +802,21 @@ function SistersCluster({ p }: { p: BoardProject }) {
         focusPayload={{ kind: 'receipt', ...p.stickers[2] }}
       >
         <Sticker icon={p.stickers[2].icon} />
+      </Artifact>
+      {/* The crew — paired with the date chip along the cluster's top
+          edge, same paper family. Only clusters with more than one
+          person wear it. */}
+      <Artifact
+        x={44}
+        y={-2}
+        rotate={-4}
+        z={20}
+        delay={at(0, 8)}
+        drift={0.8}
+        focusId={`${p.id}-people`}
+        focusPayload={{ kind: 'people', projectId: p.id }}
+      >
+        <LivePeopleChip projectId={p.id} />
       </Artifact>
     </div>
   )
@@ -1178,6 +1274,77 @@ function FocusedTaskNote({
   )
 }
 
+/** The faces chip redrawn from live state — the lifted clone keeps up
+    as invites land (a new initial slides into the stack). */
+function LivePeopleChip({ projectId }: { projectId: string }) {
+  const { projects } = useContext(TasksContext)
+  const { peopleById } = useContext(PeopleContext)
+  const people =
+    peopleById[projectId] ?? projects.find((p) => p.id === projectId)?.people ?? []
+  return <FacesChip people={people} />
+}
+
+/** The roster — unfolds beneath the lifted faces chip: everyone on the
+    board with their role, and an invite row that adds for real (fresh
+    invites land as tinted initials, in the chip too). */
+function PeopleCard({ projectId }: { projectId: string }) {
+  const { projects } = useContext(TasksContext)
+  const { peopleById, invite } = useContext(PeopleContext)
+  const people =
+    peopleById[projectId] ?? projects.find((p) => p.id === projectId)?.people ?? []
+
+  const [draft, setDraft] = useState('')
+  const commit = () => {
+    const name = draft.trim()
+    if (name) invite(projectId, name)
+    setDraft('')
+  }
+
+  return (
+    <div className="rounded-[26px] bg-white p-5 shadow-[0_24px_60px_-18px_rgba(20,16,28,0.4)]">
+      <p className="text-[10.5px] font-semibold tracking-[0.09em] text-ink/45 uppercase">
+        On this board
+      </p>
+      <div className="mt-3.5 flex flex-col gap-3">
+        {people.map((person) => (
+          <div key={person.id} className="flex items-center gap-3">
+            <PersonFace person={person} size={34} />
+            <p className="flex-1 truncate text-[13.5px] font-medium tracking-[-0.01em] text-ink">
+              {person.name}
+            </p>
+            <span className="shrink-0 text-[11.5px] text-ink/45">{person.role}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 border-t border-ink/10 pt-3.5">
+        <div className="flex items-center gap-2">
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit()
+            }}
+            placeholder="Invite by name or email"
+            aria-label="Invite someone"
+            className="h-10 min-w-0 flex-1 rounded-full bg-ink/[0.05] px-4 text-[13px] tracking-[-0.01em] text-ink outline-none placeholder:text-ink/35"
+          />
+          <button
+            type="button"
+            onClick={commit}
+            disabled={!draft.trim()}
+            className="h-10 shrink-0 rounded-full bg-ink px-4 text-[12px] font-semibold text-white outline-none transition-transform duration-150 ease-out active:scale-95 disabled:opacity-30"
+          >
+            Invite
+          </button>
+        </div>
+        <p className="mt-2.5 text-[11.5px] leading-[1.45] text-ink/40">
+          Invites get the whole board — pins, tasks, photos, receipts.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 /** The lifted artifact itself — a clone that flies from where it sat to
     its focus pose and back. Photos and the task note grow (width/height
     animate, content reflows); the small paper pieces scale up whole. */
@@ -1253,13 +1420,14 @@ function FocusClone({ focus }: { focus: Focus }) {
       </>
     )
   } else {
-    // The small paper pieces — title, chip, provider mark — scale up
-    // whole. A mark flies to a higher seat: it's the face of a booking,
-    // and its receipt needs the room beneath.
-    const S = payload.kind === 'receipt' ? 1.9 : 1.5
+    // The small paper pieces — title, chip, provider mark, faces — scale
+    // up whole. Pieces with something to unfold (a receipt, the roster)
+    // fly to a higher seat so the card has room beneath.
+    const S = payload.kind === 'receipt' ? 1.9 : payload.kind === 'people' ? 1.35 : 1.5
+    const high = payload.kind === 'receipt' || payload.kind === 'people'
     target = {
       x: (frame.w - from.w * S) / 2,
-      y: (payload.kind === 'receipt' ? frame.h * 0.14 : frame.h * 0.4) - (from.h * S) / 2,
+      y: (high ? frame.h * 0.14 : frame.h * 0.4) - (from.h * S) / 2,
       scale: S,
       rotate: -2,
     }
@@ -1270,6 +1438,8 @@ function FocusClone({ focus }: { focus: Focus }) {
         <MetaChip color={payload.color}>{payload.text}</MetaChip>
       ) : payload.kind === 'receipt' ? (
         <Sticker icon={payload.icon} />
+      ) : payload.kind === 'people' ? (
+        <LivePeopleChip projectId={payload.projectId} />
       ) : null
   }
 
@@ -1300,19 +1470,28 @@ function FocusClone({ focus }: { focus: Focus }) {
         {content}
       </motion.div>
 
-      {/* The mark's booking, unfurled beneath it — the receipt object the
-          rest of the app already trades in. It develops in once the mark
-          has climbed, and slips away first on the flight home. */}
-      {payload.kind === 'receipt' && (
+      {/* What the lifted piece unfolds beneath it — a mark's receipt, or
+          the faces chip's roster. It develops in once the piece has
+          climbed, and slips away first on the flight home. */}
+      {(payload.kind === 'receipt' || payload.kind === 'people') && (
         <motion.div
           className="absolute inset-x-0 z-10 flex justify-center px-7"
-          style={{ top: frame.h * 0.14 + (from.h * 1.9) / 2 + 24 }}
+          style={{
+            top:
+              frame.h * 0.14 +
+              (from.h * (payload.kind === 'receipt' ? 1.9 : 1.35)) / 2 +
+              24,
+          }}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0, transition: { delay: 0.3, duration: 0.32, ease: EASE } }}
           exit={{ opacity: 0, y: 8, transition: { duration: 0.16, ease: 'easeIn' } }}
         >
           <div className="w-full max-w-[330px]">
-            <ReceiptObject content={payload.receipt} />
+            {payload.kind === 'receipt' ? (
+              <ReceiptObject content={payload.receipt} />
+            ) : (
+              <PeopleCard projectId={payload.projectId} />
+            )}
           </div>
         </motion.div>
       )}
@@ -1949,6 +2128,28 @@ export function ProjectsMoodboard({
     )
   }
 
+  // Rosters live at the board — an invite made in the focus card has to
+  // survive it closing, and the cluster chip wears the new face too.
+  const [peopleById, setPeopleById] = useState<Record<string, Person[]>>(() =>
+    Object.fromEntries(BOARD.map((p) => [p.id, p.people])),
+  )
+  const invite = (projectId: string, name: string) =>
+    setPeopleById((s) => {
+      const base = s[projectId] ?? projects.find((p) => p.id === projectId)?.people ?? []
+      return {
+        ...s,
+        [projectId]: [
+          ...base,
+          {
+            id: `guest-${Date.now()}`,
+            name,
+            tint: NEW_TINTS[base.length % NEW_TINTS.length],
+            role: 'Invited',
+          },
+        ],
+      }
+    })
+
   // Photo rolls live at the board too — captions typed in the gallery
   // and uploads both have to survive closing it.
   const [galleryById, setGalleryById] = useState<Record<string, BoardPhoto[]>>(() =>
@@ -2003,6 +2204,7 @@ export function ProjectsMoodboard({
     <UnpinContext.Provider value={out}>
     <TidyContext.Provider value={tidy}>
     <TasksContext.Provider value={{ projects, tasksById, toggle, add }}>
+    <PeopleContext.Provider value={{ peopleById, invite }}>
     <FocusContext.Provider value={{ hiddenId, open: openFocus }}>
       <div className="relative h-full w-full">
       {/* Scrolling canvas — the whole board lives on one surface; the only
@@ -2100,6 +2302,7 @@ export function ProjectsMoodboard({
           screenLayer,
         )}
     </FocusContext.Provider>
+    </PeopleContext.Provider>
     </TasksContext.Provider>
     </TidyContext.Provider>
     </UnpinContext.Provider>

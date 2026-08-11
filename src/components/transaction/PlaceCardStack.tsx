@@ -17,6 +17,26 @@ const CARD_H = 110
 const PEEK = [0, 20, 36, 48]
 const DEPTH = PEEK.length - 1
 
+/** Radial tint with a smooth (smoothstep-like) falloff. A plain
+    `color → transparent` gradient fades linearly and then stops — the
+    slope discontinuity at the last stop reads as a faint ring around each
+    bloom (a Mach band; the eye amplifies it into a visible boundary).
+    Easing the alpha through several stops lands the fade at zero slope,
+    exactly at the ellipse's edge. */
+function bloom(rgb: string, alpha: number, size: string, pos: string) {
+  const stop = (k: number, at: number) =>
+    `rgba(${rgb},${Math.round(alpha * k * 1000) / 1000}) ${at}%`
+  return `radial-gradient(${size} at ${pos}, ${[
+    stop(1, 0),
+    stop(0.78, 43),
+    stop(0.5, 64),
+    stop(0.22, 80),
+    stop(0.06, 90),
+    stop(0.015, 96),
+    stop(0, 100),
+  ].join(', ')})`
+}
+
 /** Tiling fractal-noise film grain, inlined so it costs no network fetch. */
 const GRAIN = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`
 
@@ -25,7 +45,7 @@ const STAR =
   'M10 1.6l2.47 5.4 5.9.64-4.38 4.01 1.2 5.82L10 14.52l-5.19 2.95 1.2-5.82L1.63 7.64l5.9-.64z'
 
 /** Provider-branded rating: filled stars in the brand color over gray bases. */
-function Stars({ rating, color }: { rating: number; color: string }) {
+export function Stars({ rating, color }: { rating: number; color: string }) {
   const row = (fill: string) => (
     <div className="flex gap-[2px]">
       {Array.from({ length: 5 }, (_, i) => (
@@ -91,8 +111,17 @@ function PlaceCard({
       <Squircle
         cornerRadius={31}
         cornerSmoothing={1}
-        className="relative h-full w-full backdrop-blur-[28px]"
+        // backdrop-blur only on the front card: rear cards sit under a
+        // depth-of-field blur() filter, and a backdrop-filter anywhere
+        // inside a filtered ancestor smears blurred backdrop across the
+        // ancestor's whole rectangular filter region (a ghost sheet with
+        // visible edges). Rear fills are near-solid, so nothing is lost.
+        className={`relative h-full w-full ${muted ? '' : 'backdrop-blur-[28px]'}`}
         style={{
+          // backdrop-filter ignores the squircle mask (it clips to the
+          // border box only), so without a real radius the blurred backdrop
+          // paints square corners past the card's silhouette.
+          borderRadius: 31,
           // The front card reads as near-solid white; resting cards are
           // frostier — they recede into the ambient color behind the stack,
           // which the heavy soft-focus blur turns into atmosphere.
@@ -210,16 +239,22 @@ export function PlaceCardStack({
       {/* Ambient color behind the glass — kept quiet, just enough that the
           frost doesn't read as flat gray. The stack's depth comes from the
           cards' own material (fill, hairline, soft shadow), not from color. */}
+      {/* The wash box is much bigger than the stack so every bloom can
+          dissolve over ~100px of open canvas. Tints that die within a few
+          px of the card silhouette read as a capsule/boundary hugging the
+          stack, no matter how smooth the falloff is. Each ellipse's full
+          extent stays inside this box, so nothing clips into a straight
+          edge at the element bounds. */}
       {ambient && (
       <div
         aria-hidden
-        className="pointer-events-none absolute -inset-10"
+        className="pointer-events-none absolute"
         style={{
-          filter: 'blur(40px)',
+          inset: '-88px -100px',
           background: [
-            'radial-gradient(46% 42% at 22% 64%, rgba(141,159,166,0.4), transparent 72%)',
-            'radial-gradient(46% 44% at 82% 38%, rgba(122,103,208,0.32), transparent 72%)',
-            'radial-gradient(40% 34% at 55% 12%, rgba(211,198,187,0.5), transparent 72%)',
+            bloom('141,159,166', 0.22, '40% 36%', '40% 60%'),
+            bloom('122,103,208', 0.17, '40% 36%', '60% 42%'),
+            bloom('211,198,187', 0.28, '34% 30%', '52% 32%'),
           ].join(', '),
         }}
       />
@@ -245,7 +280,6 @@ export function PlaceCardStack({
               x: 0,
               scale: reduced || isFront ? 1 : 1 - depth * 0.045,
               opacity: 1 - depth * 0.06,
-              filter: reduced ? 'blur(0px)' : `blur(${Math.min(depth * 1.2, 3)}px)`,
             }}
             transition={
               reduced ? { duration: 0.25 } : { type: 'spring', stiffness: 300, damping: 28 }
@@ -279,13 +313,22 @@ export function PlaceCardStack({
               data-place-card={r.place.id}
               className={isFront ? 'cursor-grab active:cursor-grabbing' : undefined}
               style={{
-                // drop-shadow follows the squircle silhouette instead of a
-                // rounded rect, and isn't clipped since the clip happens
-                // inside PlaceCard. Rear cards get a soft drop so their
-                // exposed bottom band separates from the white canvas.
-                filter: isFront
-                  ? 'drop-shadow(0 18px 22px rgba(0,0,0,0.07))'
-                  : 'drop-shadow(0 6px 12px rgba(0,0,0,0.05))',
+                // box-shadow, NOT filter: drop-shadow — the card inside has
+                // a backdrop-filter, and a backdrop-filter inside a filtered
+                // ancestor smears blurred backdrop across the whole
+                // rectangular filter region (a visible ghost sheet around
+                // the card). The radius shapes the shadow to (almost) the
+                // squircle silhouette; the card clips itself inside.
+                borderRadius: 32,
+                boxShadow: isFront
+                  ? '0 18px 44px rgba(0,0,0,0.07)'
+                  : '0 6px 24px rgba(0,0,0,0.05)',
+                // Depth-of-field lives here (not on the motion wrapper) so
+                // the front card's backdrop-blur never has a filtered
+                // ancestor. `none` on the front card removes the filter
+                // region entirely; CSS interpolates none <-> blur() fine.
+                filter: reduced || isFront ? 'none' : `blur(${Math.min(depth * 1.2, 3)}px)`,
+                transition: 'filter 0.35s ease',
                 touchAction: 'none',
               }}
             >
