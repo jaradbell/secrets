@@ -16,6 +16,9 @@ for (const [tag, id] of [
   ['7c', 'match-scores-7c'],
   ['7d', 'match-scores-7d'],
   ['7e', 'match-scores-7e'],
+  ['7f', 'match-scores-7f'],
+  ['7g', 'match-scores-7g'],
+  ['7h', 'match-scores-7h'],
 ]) {
   await page.goto(`http://localhost:49488/#${id}`)
   await page.reload()

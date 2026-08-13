@@ -31,7 +31,7 @@ import {
   type ProviderId,
   type RankedResult,
 } from './data'
-import { MatchChip, matchFill, matchLook, RankChip, useMatchStyle } from './MatchRing'
+import { MatchChip, matchFill, matchLook, MatchRing, RankChip, useMatchStyle } from './MatchRing'
 import { Stars } from './PlaceCardStack'
 import { useReservationFlow } from './reservationFlow'
 import { ProviderChips } from './TransactionView'
@@ -159,11 +159,16 @@ function MapPin({
               look={lead ? 'ink' : 'white'}
               className="px-2.5 py-[7px] text-[11.5px] leading-none shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
             />
-          ) : matchStyle === 'number-chip' ? (
-            /* 7E: a white pill with real anatomy — the rank seated in its
-               own ink circle (transit-badge style) so the two numbers never
-               run together, the percentage beside it, and a hairline ring
-               to hold the edge over busy streets. */
+          ) : matchStyle === 'number-chip' ||
+            matchStyle === 'photo-ring' ||
+            matchStyle === 'photo-meter' ||
+            matchStyle === 'chip-above' ||
+            matchStyle === 'rank-left' ||
+            matchStyle === 'chip-below' ? (
+            /* 7E/7F/7G/7H/7I/7J: a white pill with real anatomy — the rank seated in
+               its own ink circle (transit-badge style) so the two numbers
+               never run together, the percentage beside it, and a hairline
+               ring to hold the edge over busy streets. */
             <span className="flex items-center gap-[5px] rounded-full bg-white p-[3px] pr-[9px] shadow-[0_4px_16px_rgba(0,0,0,0.2)] ring-1 ring-black/[0.05]">
               <span className="flex size-[19px] items-center justify-center rounded-full bg-ink text-[10.5px] font-semibold leading-none text-white">
                 {rank}
@@ -219,6 +224,33 @@ function MapPin({
         </motion.span>
       )}
     </motion.button>
+  )
+}
+
+/** The combo capsule — rank dot + "% match" — shared by 7H (flag above the
+    row) and 7J (deal-tag below the content). The lead goes ink; the rest
+    sit on a soft neutral. */
+function MatchCapsule({ rank, match }: { rank: number; match: number }) {
+  const lead = rank === 1
+  return (
+    <span
+      className={`flex items-center gap-[6px] rounded-full p-[3px] pr-[9px] ${
+        lead ? 'bg-ink' : 'bg-black/[0.05]'
+      }`}
+    >
+      <span
+        className={`flex size-[18px] items-center justify-center rounded-full text-[10.5px] font-semibold leading-none ${
+          lead ? 'bg-white text-ink' : 'bg-ink text-white'
+        }`}
+      >
+        {rank}
+      </span>
+      <span
+        className={`text-[11px] font-semibold leading-none ${lead ? 'text-white' : 'text-ink'}`}
+      >
+        {match}% match
+      </span>
+    </span>
   )
 }
 
@@ -479,8 +511,64 @@ export function CompareView({
                     if (thumb) onOpenPlace(r, e.currentTarget, thumb)
                   }}
                   transition={SPRING}
-                  className="flex w-full items-center gap-3.5 border-b border-black/5 py-3.5 text-left outline-none last:border-b-0"
+                  className="w-full border-b border-black/5 py-3.5 text-left outline-none last:border-b-0"
                 >
+                  {/* 7H: the combo capsule flies as a flag above the row —
+                      the flight-results grammar ("Best", "Cheapest") — so
+                      the standing frames the result instead of competing
+                      with it. Lead goes ink; the rest sit on a soft
+                      neutral. Collapses when the Best match lens is off. */}
+                  {matchStyle === 'chip-above' && (
+                    <motion.div
+                      initial={false}
+                      animate={
+                        sort === 'match'
+                          ? { height: 24, marginBottom: 9, opacity: 1 }
+                          : { height: 0, marginBottom: 0, opacity: 0 }
+                      }
+                      transition={{ duration: 0.3, ease: EASE }}
+                      className="flex items-start overflow-hidden"
+                    >
+                      <MatchCapsule
+                        rank={matchRank.get(r.place.id) ?? 0}
+                        match={r.place.match}
+                      />
+                    </motion.div>
+                  )}
+                  <div className="flex w-full items-center gap-3.5">
+                  {/* 7I: the compact column — rank circle over a quiet
+                      percentage, 7E's rail anatomy — leads the row from the
+                      LEFT of the photo, so the standing reads before the
+                      identity. Tied to the Best match lens like the rail:
+                      it rides in with the reorder and collapses away when
+                      the sort toggles off. */}
+                  {matchStyle === 'rank-left' && (
+                    <motion.span
+                      className="flex shrink-0 items-center justify-center overflow-hidden"
+                      initial={false}
+                      animate={
+                        sort === 'match'
+                          ? { width: 26, marginRight: 0, opacity: 1, scale: 1 }
+                          : { width: 0, marginRight: -14, opacity: 0, scale: 0.6 }
+                      }
+                      transition={{ duration: 0.3, ease: EASE }}
+                    >
+                      <span className="flex shrink-0 flex-col items-center gap-[5px]">
+                        <span
+                          className={`flex size-[22px] items-center justify-center rounded-full text-[11px] font-semibold leading-none ${
+                            matchRank.get(r.place.id) === 1
+                              ? 'bg-ink text-white'
+                              : 'bg-black/[0.06] text-ink'
+                          }`}
+                        >
+                          {matchRank.get(r.place.id) ?? 0}
+                        </span>
+                        <span className="text-[10px] font-medium leading-none text-ink-tertiary">
+                          {r.place.match}%
+                        </span>
+                      </span>
+                    </motion.span>
+                  )}
                   <span className="relative shrink-0">
                     <Squircle asChild cornerRadius={15} cornerSmoothing={1}>
                       <img
@@ -491,11 +579,14 @@ export function CompareView({
                         className="h-[76px] w-[76px] object-cover"
                       />
                     </Squircle>
-                    {/* 7D: the standing rides the photo — a corner badge
+                    {/* 7D/7F/7G: the standing rides the photo — a corner badge
                         notched over the squircle, tied to the Best match
                         lens like the rail. The lead goes ink, the rest
-                        white, same as the map pins. */}
-                    {matchStyle === 'photo-rank' && (
+                        white, same as the map pins. In 7G the list stays
+                        this minimal; the percentage lives on the map pins. */}
+                    {(matchStyle === 'photo-rank' ||
+                      matchStyle === 'photo-ring' ||
+                      matchStyle === 'photo-meter') && (
                       <motion.span
                         initial={false}
                         animate={
@@ -534,6 +625,28 @@ export function CompareView({
                         ({r.reviews.toLocaleString()})
                       </span>
                     </motion.div>
+                    {/* 7J: the capsule tucks BELOW the content — the
+                        deal-tag grammar (grocery apps' "$25 off" chips
+                        under each store): the result reads first and the
+                        standing captions it, aligned with the text column.
+                        Tied to the Best match lens like the flag. */}
+                    {matchStyle === 'chip-below' && (
+                      <motion.div
+                        initial={false}
+                        animate={
+                          sort === 'match'
+                            ? { height: 24, marginTop: 8, opacity: 1 }
+                            : { height: 0, marginTop: 0, opacity: 0 }
+                        }
+                        transition={{ duration: 0.3, ease: EASE }}
+                        className="flex items-end overflow-hidden"
+                      >
+                        <MatchCapsule
+                          rank={matchRank.get(r.place.id) ?? 0}
+                          match={r.place.match}
+                        />
+                      </motion.div>
+                    )}
                   </div>
                   {/* Right rail: the score chip, tied to the Best match
                       lens — it rides in as the rows reorder (the animation
@@ -543,10 +656,18 @@ export function CompareView({
                       column reads as a hierarchy. Rank/gradient styles trade
                       the score pill for the standing circle — same one the
                       map pins carry; number-chip captions that circle with
-                      a quiet percentage (icon-plus-label, nothing heavy).
-                      Photo-rank retires the rail (the badge on the thumb
-                      carries the standing). */}
-                  {matchStyle !== 'photo-rank' && (
+                      a quiet percentage (icon-plus-label, nothing heavy);
+                      photo-ring pairs the thumb's badge with a compact
+                      progress meter here. Photo-rank and photo-meter retire
+                      the rail (the badge on the thumb carries it all),
+                      chip-above hoists it over the row as a flag,
+                      rank-left moves it ahead of the photo, and chip-below
+                      tucks it under the content as a deal tag. */}
+                  {matchStyle !== 'photo-rank' &&
+                    matchStyle !== 'photo-meter' &&
+                    matchStyle !== 'chip-above' &&
+                    matchStyle !== 'rank-left' &&
+                    matchStyle !== 'chip-below' && (
                     <motion.span
                       className="flex shrink-0 items-center justify-center overflow-hidden"
                       initial={false}
@@ -571,6 +692,20 @@ export function CompareView({
                             {r.place.match}%
                           </span>
                         </span>
+                      ) : matchStyle === 'photo-ring' ? (
+                        /* 7F: the meter — an ink arc showing how full the
+                           match is, the percentage seated inside. */
+                        <MatchRing
+                          score={r.place.match}
+                          size={28}
+                          stroke={2.5}
+                          color="#0d0d0d"
+                          track="rgba(0,0,0,0.08)"
+                        >
+                          <span className="text-[8.5px] font-semibold leading-none tracking-[-0.02em] text-ink">
+                            {r.place.match}%
+                          </span>
+                        </MatchRing>
                       ) : (
                         <RankChip
                           rank={matchRank.get(r.place.id) ?? 0}
@@ -582,6 +717,7 @@ export function CompareView({
                       )}
                     </motion.span>
                   )}
+                  </div>
                 </motion.button>
               ))}
             </div>

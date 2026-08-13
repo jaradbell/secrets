@@ -9,6 +9,7 @@ import { ReceiptGalleryConversation } from '../components/transaction/ReceiptGal
 import { ReceiptGalleryExpressive } from '../components/transaction/ReceiptGalleryExpressive'
 import { ReceiptGalleryTicket } from '../components/transaction/ReceiptGalleryTicket'
 import { ReceiptGalleryWallet } from '../components/transaction/ReceiptGalleryWallet'
+import { FlightsView } from '../components/transaction/FlightsView'
 import { MatchStyleProvider } from '../components/transaction/MatchRing'
 import { ReservationProvider } from '../components/transaction/reservationFlow'
 import { TransactionView } from '../components/transaction/TransactionView'
@@ -358,6 +359,139 @@ const PROTOTYPES: {
       </MatchStyleProvider>
     ),
   },
+  {
+    // 7D's photo badge paired with a compact progress meter on the right:
+    // the rank rides the thumbnail while an ink ring carries the
+    // percentage. Map pins keep the rank circles.
+    id: 'match-scores-7f',
+    tag: '7F',
+    label: 'Photo + Meter',
+    ambient: 'composer',
+    render: () => (
+      <MatchStyleProvider style="photo-ring">
+        <ReservationProvider>
+          <VoiceControl
+            followUp="none"
+            receipt={null}
+            idleContent={<TransactionView variant="2d" />}
+          />
+        </ReservationProvider>
+      </MatchStyleProvider>
+    ),
+  },
+  {
+    // Badge and meter fused: the photo's rank circle wears its match arc
+    // as an outline (no rail at all), with 7E's white pill POIs on the map.
+    id: 'match-scores-7g',
+    tag: '7G',
+    label: 'Meter Badge',
+    ambient: 'composer',
+    render: () => (
+      <MatchStyleProvider style="photo-meter">
+        <ReservationProvider>
+          <VoiceControl
+            followUp="none"
+            receipt={null}
+            idleContent={<TransactionView variant="2d" />}
+          />
+        </ReservationProvider>
+      </MatchStyleProvider>
+    ),
+  },
+  {
+    // The combo capsule (rank dot + "% match") flies as a flag above each
+    // row — the flight-results grammar ("Best", "Cheapest") — with 7E's
+    // white pill POIs on the map.
+    id: 'match-scores-7h',
+    tag: '7H',
+    label: 'Flag Chip',
+    ambient: 'composer',
+    render: () => (
+      <MatchStyleProvider style="chip-above">
+        <ReservationProvider>
+          <VoiceControl
+            followUp="none"
+            receipt={null}
+            idleContent={<TransactionView variant="2d" />}
+          />
+        </ReservationProvider>
+      </MatchStyleProvider>
+    ),
+  },
+  {
+    // 7E's compact column (rank circle + quiet percentage) leads the row
+    // from the LEFT of the photo — the standing reads before the identity,
+    // like a numbered leaderboard — with 7E's white pill POIs on the map.
+    id: 'match-scores-7i',
+    tag: '7I',
+    label: 'Rank Left',
+    ambient: 'composer',
+    render: () => (
+      <MatchStyleProvider style="rank-left">
+        <ReservationProvider>
+          <VoiceControl
+            followUp="none"
+            receipt={null}
+            idleContent={<TransactionView variant="2d" />}
+          />
+        </ReservationProvider>
+      </MatchStyleProvider>
+    ),
+  },
+  {
+    // 7H's capsule tucked BELOW the row's content — the deal-tag grammar
+    // (grocery apps' "$25 off" chips under each store): the result reads
+    // first, the standing captions it. 7E's white pill POIs on the map.
+    id: 'match-scores-7j',
+    tag: '7J',
+    label: 'Tag Below',
+    ambient: 'composer',
+    render: () => (
+      <MatchStyleProvider style="chip-below">
+        <ReservationProvider>
+          <VoiceControl
+            followUp="none"
+            receipt={null}
+            idleContent={<TransactionView variant="2d" />}
+          />
+        </ReservationProvider>
+      </MatchStyleProvider>
+    ),
+  },
+  // List result variants — the suggested-object moment (stacked result in
+  // conversation) and its full results surface, per domain.
+  {
+    // Flights: the Figma ticket (node 2331:82360) as the object class —
+    // airline chips source the deck, View More morphs the full list open.
+    id: 'list-results-8a',
+    tag: '8A',
+    label: 'Flights',
+    ambient: 'composer',
+    render: () => (
+      <ReservationProvider>
+        <VoiceControl followUp="none" receipt={null} idleContent={<FlightsView />} />
+      </ReservationProvider>
+    ),
+  },
+  {
+    // Places: the current restaurant treatment for the same two surfaces —
+    // the thread's frosted card stack and the Compare map + list sheet.
+    id: 'list-results-8b',
+    tag: '8B',
+    label: 'Places',
+    ambient: 'composer',
+    render: () => (
+      <MatchStyleProvider style="score">
+        <ReservationProvider>
+          <VoiceControl
+            followUp="none"
+            receipt={null}
+            idleContent={<TransactionView variant="2d" />}
+          />
+        </ReservationProvider>
+      </MatchStyleProvider>
+    ),
+  },
 ]
 
 /** Tag-6 stage: tap anywhere to kill the loader and watch it be reborn. */
@@ -438,6 +572,9 @@ export function App() {
                 )}
                 {p.tag === '7A' && (
                   <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">7. Match Scores</p>
+                )}
+                {p.tag === '8A' && (
+                  <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">8. List Result Variants</p>
                 )}
                 <a
                   href={`#${p.id}`}

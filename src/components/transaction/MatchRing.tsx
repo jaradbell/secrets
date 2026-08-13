@@ -20,10 +20,34 @@
  *                   the roommate-list motif; the rail stands down (7D).
  *   'number-chip' — a bare rank numeral with the match percentage chipped
  *                   beneath; POIs go white carrying both numbers (7E).
+ *   'photo-ring'  — 7D's photo badge plus a compact progress meter in the
+ *                   rail carrying the percentage (7F).
+ *   'photo-meter' — the photo badge fused with the meter: the rank circle
+ *                   wears its match arc as an outline; POIs from 7E (7G).
+ *   'chip-above'  — the combo capsule (rank dot + "% match") flies a flag
+ *                   above each row, the flight-results grammar; POIs from
+ *                   7E (7H).
+ *   'rank-left'   — 7E's compact column (rank circle over a quiet
+ *                   percentage) leads the row from the LEFT of the photo,
+ *                   so standing reads before identity; POIs from 7E (7I).
+ *   'chip-below'  — 7H's combo capsule tucked BELOW the row's content,
+ *                   the deal-tag grammar (grocery apps' "$25 off" chips):
+ *                   the result reads first, the standing captions it;
+ *                   POIs from 7E (7J).
  */
 import { createContext, useContext, useId, type ReactNode } from 'react'
 
-export type MatchStyle = 'score' | 'rank' | 'gradient' | 'photo-rank' | 'number-chip'
+export type MatchStyle =
+  | 'score'
+  | 'rank'
+  | 'gradient'
+  | 'photo-rank'
+  | 'number-chip'
+  | 'photo-ring'
+  | 'photo-meter'
+  | 'chip-above'
+  | 'rank-left'
+  | 'chip-below'
 
 const MatchStyleContext = createContext<MatchStyle>('score')
 
