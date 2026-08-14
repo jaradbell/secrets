@@ -13,6 +13,7 @@ import { FlightsView } from '../components/transaction/FlightsView'
 import { MatchStyleProvider } from '../components/transaction/MatchRing'
 import { ReservationProvider } from '../components/transaction/reservationFlow'
 import { SportsView } from '../components/transaction/SportsView'
+import { StaysView } from '../components/transaction/StaysView'
 import { TransactionView } from '../components/transaction/TransactionView'
 import { EmptyState } from '../components/voice/EmptyState'
 import { GooLoader } from '../components/voice/GooLoader'
@@ -505,6 +506,20 @@ const PROTOTYPES: {
     render: () => (
       <ReservationProvider>
         <VoiceControl followUp="none" receipt={null} idleContent={<SportsView />} />
+      </ReservationProvider>
+    ),
+  },
+  {
+    // Stays: the Figma stay card (node 2377:73083) as the object class —
+    // marketplace chips (Airbnb, Vrbo, Expedia) source the deck, View More
+    // morphs the full rental / hotel list open.
+    id: 'list-results-8d',
+    tag: '8D',
+    label: 'Stays',
+    ambient: 'composer',
+    render: () => (
+      <ReservationProvider>
+        <VoiceControl followUp="none" receipt={null} idleContent={<StaysView />} />
       </ReservationProvider>
     ),
   },
