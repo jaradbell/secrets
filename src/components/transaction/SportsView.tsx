@@ -2,8 +2,9 @@
  * Sports list-result prototype (8C): one thread, three inquiries — the
  * suggested object changes shape with the question.
  *
- *   schedule  → the two-team fixture card (Figma 2279:78979): logos and
- *               records on the left, "Tomorrow / 7:30 PM" on the right.
+ *   schedule  → the two-team fixture card (Figma 2279:78979) dealt as a
+ *               swipeable deck of the upcoming slate: logos and records on
+ *               the left, "Tomorrow / 7:30 PM" on the right.
  *   live game → the scoreboard card (Figma 2377:73529): big club logos,
  *               the Live pill over the score, period clock, and the series
  *               line under a perforation rule.
@@ -12,121 +13,38 @@
  *               grammar pointed at a table.
  *
  * League chips (NBA / ESPN) attribute whose feed the answer carries, same
- * grammar as the thread's provider chips.
+ * grammar as the thread's provider chips. Each View More clip-morphs the
+ * inquiry's full surface open (SportsListView) — the schedule slate or the
+ * league standings.
  */
-import { motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ConversationHeader } from './ConversationHeader'
+import { SportsListView, type SportsListMode, type SportsListOrigin } from './SportsListView'
+import {
+  SCHEDULE,
+  SportsChips,
+  WEST_STANDINGS as STANDINGS,
+  type ScheduleGame,
+  type SportsProviderId,
+  type TeamStanding,
+} from './sportsData'
 
 const EASE = [0.32, 0.72, 0, 1] as const
-
-type SportsProviderId = 'nba' | 'espn'
-
-type TeamStanding = {
-  rank: number
-  name: string
-  logo: string
-  w: number
-  l: number
-  pct: string
-  gb: string
-  l10: string
-  strk: string
-}
-
-/** Western Conference top ten — Spurs lead, mirroring the design's row. */
-const STANDINGS: TeamStanding[] = [
-  { rank: 1, name: 'Spurs', logo: '/sports/teams/sa.png', w: 60, l: 22, pct: '.732', gb: '-', l10: '8-2', strk: 'w3' },
-  { rank: 2, name: 'Thunder', logo: '/sports/teams/okc.png', w: 59, l: 23, pct: '.720', gb: '1.0', l10: '8-2', strk: 'w5' },
-  { rank: 3, name: 'Nuggets', logo: '/sports/teams/den.png', w: 55, l: 27, pct: '.671', gb: '5.0', l10: '7-3', strk: 'w2' },
-  { rank: 4, name: 'Wolves', logo: '/sports/teams/min.png', w: 52, l: 30, pct: '.634', gb: '8.0', l10: '6-4', strk: 'l1' },
-  { rank: 5, name: 'Mavericks', logo: '/sports/teams/dal.png', w: 50, l: 32, pct: '.610', gb: '10.0', l10: '7-3', strk: 'w1' },
-  { rank: 6, name: 'Lakers', logo: '/sports/teams/lal.png', w: 47, l: 35, pct: '.573', gb: '13.0', l10: '5-5', strk: 'l2' },
-  { rank: 7, name: 'Clippers', logo: '/sports/teams/lac.png', w: 45, l: 37, pct: '.549', gb: '15.0', l10: '4-6', strk: 'w1' },
-  { rank: 8, name: 'Suns', logo: '/sports/teams/phx.png', w: 44, l: 38, pct: '.537', gb: '16.0', l10: '6-4', strk: 'l1' },
-  { rank: 9, name: 'Grizzlies', logo: '/sports/teams/mem.png', w: 41, l: 41, pct: '.500', gb: '19.0', l10: '5-5', strk: 'w2' },
-  { rank: 10, name: 'Kings', logo: '/sports/teams/sac.png', w: 39, l: 43, pct: '.476', gb: '21.0', l10: '3-7', strk: 'l3' },
-]
 
 /** Family shadow — same as the flight ticket's, so the sports objects read
     as the same suggested-result class. */
 const CARD_SHADOW = '0px 11px 20px rgba(0,0,0,0.1)'
 
-/** League attribution chips — ProviderChips' grammar with sports sources.
-    ESPN's mark is its wordmark knocked out white on the brand's red disc;
-    the NBA's is the league lockup on white. */
-function SportsChips({
-  active,
-  onSelect,
-}: {
-  active: SportsProviderId
-  onSelect: (id: SportsProviderId) => void
-}) {
-  const providers: { id: SportsProviderId; name: string }[] = [
-    { id: 'nba', name: 'NBA' },
-    { id: 'espn', name: 'ESPN' },
-  ]
-  return (
-    <div className="flex items-center gap-2">
-      {providers.map((p) => {
-        const isActive = p.id === active
-        return (
-          <motion.button
-            key={p.id}
-            type="button"
-            layout
-            onClick={() => onSelect(p.id)}
-            aria-pressed={isActive}
-            aria-label={p.name}
-            className="flex items-center rounded-full border border-white/20 p-1 outline-none"
-            style={{ background: 'rgba(0,0,0,0.04)' }}
-            transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-          >
-            {p.id === 'espn' ? (
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white bg-[#cc0000]">
-                <img
-                  src="/sports/espn.svg"
-                  alt=""
-                  draggable={false}
-                  className="w-[19px]"
-                  style={{ filter: 'brightness(0) invert(1)' }}
-                />
-              </span>
-            ) : (
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white bg-white">
-                <img
-                  src="/sports/nba.png"
-                  alt=""
-                  draggable={false}
-                  className="h-[22px] w-[22px] object-contain"
-                />
-              </span>
-            )}
-            {isActive && (
-              <motion.span
-                layout
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="ml-1 flex h-8 items-center rounded-full bg-white/80 px-3 text-[12px] font-medium tracking-[0.2px] whitespace-nowrap text-ink"
-              >
-                {p.name}
-              </motion.span>
-            )}
-          </motion.button>
-        )
-      })}
-    </div>
-  )
-}
-
 /** The View More affordance under a result — the same pill the flights and
-    places threads carry. Decorative here: the full surfaces aren't part of
-    this prototype. */
-function ViewMorePill() {
+    places threads carry. The full surface clip-morphs open from its exact
+    bounds. */
+function ViewMorePill({ onOpen }: { onOpen: (e: React.MouseEvent<HTMLButtonElement>) => void }) {
   return (
     <button
       type="button"
+      onClick={onOpen}
       className="mx-auto flex items-center gap-1.5 rounded-full bg-black/[0.05] px-4 py-2.5 text-[12px] font-medium text-ink outline-none transition-transform duration-200 ease-out active:scale-[0.97]"
     >
       View More
@@ -146,32 +64,45 @@ function ViewMorePill() {
   )
 }
 
-/** Fixture card (Figma 2279:78979) — the schedule answer. */
-function ScheduleCard() {
-  const teams = [
-    { name: 'Spurs', record: '(2-3)', logo: '/sports/spurs.svg' },
-    { name: 'Thunder', record: '(3-2)', logo: '/sports/thunder.svg' },
-  ]
+const SCHEDULE_H = 90
+
+/** The Spurs' remaining slate — the fixture deck's cards. */
+const SPURS_GAMES = SCHEDULE.flatMap((g) => g.games).filter((g) =>
+  g.teams.some((t) => t.name === 'Spurs'),
+)
+
+/** Fixture card (Figma 2279:78979) — one upcoming game, dealt as a deck. */
+function ScheduleCard({ game, muted = false }: { game: ScheduleGame; muted?: boolean }) {
   return (
     <div
-      className="flex items-center justify-between rounded-[32px] bg-white p-4"
-      style={{ boxShadow: CARD_SHADOW }}
+      className="flex w-full items-center justify-between rounded-[32px] bg-white p-4"
+      style={{
+        height: SCHEDULE_H,
+        boxShadow: muted
+          ? '0px 6px 20px rgba(0,0,0,0.06), inset 0 0 0 1px rgba(0,0,0,0.05)'
+          : CARD_SHADOW,
+      }}
     >
-      <div className="flex flex-col gap-3">
-        {teams.map((t) => (
-          <span key={t.name} className="flex items-center gap-[7px]">
-            <span className="flex size-[23px] items-center justify-center">
-              <img src={t.logo} alt="" draggable={false} className="size-5 object-contain" />
+      <div
+        className="flex w-full items-center justify-between transition-opacity duration-300"
+        style={{ opacity: muted ? 0 : 1 }}
+      >
+        <div className="flex flex-col gap-3">
+          {game.teams.map((t) => (
+            <span key={t.name} className="flex items-center gap-[7px]">
+              <span className="flex size-[23px] items-center justify-center">
+                <img src={t.logo} alt="" draggable={false} className="size-5 object-contain" />
+              </span>
+              <p className="text-[14px] font-medium tracking-[-0.01em] text-[#110707]">
+                {t.name} <span className="text-[rgba(17,7,7,0.4)]">{t.record}</span>
+              </p>
             </span>
-            <p className="text-[14px] font-medium tracking-[-0.01em] text-[#110707]">
-              {t.name} <span className="text-[rgba(17,7,7,0.4)]">{t.record}</span>
-            </p>
-          </span>
-        ))}
-      </div>
-      <div className="flex flex-col gap-2 pr-1 text-right text-[12px] leading-none font-medium text-black">
-        <p>Tomorrow</p>
-        <p>7:30 PM</p>
+          ))}
+        </div>
+        <div className="flex flex-col gap-2 pr-1 text-right text-[12px] leading-none font-medium text-black">
+          <p>{game.day}</p>
+          <p>{game.time}</p>
+        </div>
       </div>
     </div>
   )
@@ -287,12 +218,24 @@ function StandingCard({ team, muted = false }: { team: TeamStanding; muted?: boo
 const PEEK = [0, 16, 30]
 const DEPTH = PEEK.length - 1
 
-/** The rankings answer: standings dealt as a swipeable deck, 1–10. Flick
-    to page through the ranks; tap advances. */
-function StandingsStack() {
+/** The swipeable deck both sports answers deal from — flick to page
+    through the cards; tap advances. */
+function Deck<T>({
+  items,
+  height,
+  ariaLabel,
+  keyOf,
+  children,
+}: {
+  items: T[]
+  height: number
+  ariaLabel: string
+  keyOf: (item: T) => string | number
+  children: (item: T, muted: boolean) => React.ReactNode
+}) {
   const reduced = useReducedMotion()
   const [current, setCurrent] = useState(0)
-  const n = STANDINGS.length
+  const n = items.length
   const draggingRef = useRef(false)
 
   const advance = () => setCurrent((c) => (c + 1) % n)
@@ -301,18 +244,18 @@ function StandingsStack() {
   return (
     <div
       className="relative w-full"
-      style={{ height: STANDING_H + PEEK[Math.min(DEPTH, n - 1)] }}
+      style={{ height: height + PEEK[Math.min(DEPTH, n - 1)] }}
       role="group"
       aria-roledescription="carousel"
-      aria-label="Western Conference standings, ranks 1 through 10"
+      aria-label={ariaLabel}
     >
-      {STANDINGS.map((team, i) => {
+      {items.map((item, i) => {
         const depth = (i - current + n) % n
         if (depth > DEPTH) return null
         const isFront = depth === 0
         return (
           <motion.div
-            key={team.rank}
+            key={keyOf(item)}
             className="absolute inset-x-0 top-0"
             style={{ zIndex: n - depth }}
             initial={reduced ? { opacity: 0 } : { y: -40, opacity: 0 }}
@@ -351,12 +294,40 @@ function StandingsStack() {
                 touchAction: 'none',
               }}
             >
-              <StandingCard team={team} muted={!isFront} />
+              {children(item, !isFront)}
             </div>
           </motion.div>
         )
       })}
     </div>
+  )
+}
+
+/** The schedule answer: the Spurs' remaining games dealt as a deck. */
+function ScheduleStack() {
+  return (
+    <Deck
+      items={SPURS_GAMES}
+      height={SCHEDULE_H}
+      ariaLabel="Upcoming Spurs games"
+      keyOf={(g) => g.id}
+    >
+      {(game, muted) => <ScheduleCard game={game} muted={muted} />}
+    </Deck>
+  )
+}
+
+/** The rankings answer: standings dealt as a deck, 1–10. */
+function StandingsStack() {
+  return (
+    <Deck
+      items={STANDINGS}
+      height={STANDING_H}
+      ariaLabel="Western Conference standings, ranks 1 through 10"
+      keyOf={(t) => t.rank}
+    >
+      {(team, muted) => <StandingCard team={team} muted={muted} />}
+    </Deck>
   )
 }
 
@@ -391,10 +362,34 @@ function Exchange({
 export function SportsView({ title = 'Spurs Season' }: { title?: string }) {
   const [provider, setProvider] = useState<SportsProviderId>('espn')
 
+  // The full results surface — which inquiry's list is open, and the pill
+  // bounds it morphs from. Provider state is shared, so toggles carry
+  // both ways.
+  const [list, setList] = useState<{ mode: SportsListMode; origin: SportsListOrigin } | null>(
+    null,
+  )
+
   const [screenEl, setScreenEl] = useState<HTMLElement | null>(null)
   useEffect(() => {
     setScreenEl(document.getElementById('app-screen'))
   }, [])
+
+  // The list surface clip-morphs open from the tapped pill's exact bounds,
+  // measured against the device frame.
+  const openList = (mode: SportsListMode) => (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (!screenEl) return
+    const v = screenEl.getBoundingClientRect()
+    const b = e.currentTarget.getBoundingClientRect()
+    setList({
+      mode,
+      origin: {
+        top: b.top - v.top,
+        left: b.left - v.left,
+        right: v.right - b.right,
+        bottom: v.bottom - b.bottom,
+      },
+    })
+  }
 
   return (
     <div
@@ -409,9 +404,9 @@ export function SportsView({ title = 'Spurs Season' }: { title?: string }) {
         </p>
         <SportsChips active={provider} onSelect={setProvider} />
         <div className="mt-1">
-          <ScheduleCard />
+          <ScheduleStack />
         </div>
-        <ViewMorePill />
+        <ViewMorePill onOpen={openList('schedule')} />
       </Exchange>
 
       {/* Live-game inquiry → the scoreboard. */}
@@ -437,10 +432,28 @@ export function SportsView({ title = 'Spurs Season' }: { title?: string }) {
         <div className="mt-1">
           <StandingsStack />
         </div>
-        <ViewMorePill />
+        <ViewMorePill onOpen={openList('standings')} />
       </Exchange>
 
       {screenEl && createPortal(<ConversationHeader title={title} />, screenEl)}
+
+      {/* Full results — under the dock's orb, so voice stays live over it. */}
+      {screenEl &&
+        createPortal(
+          <AnimatePresence>
+            {list && (
+              <SportsListView
+                key={`sports-list-${list.mode}`}
+                mode={list.mode}
+                origin={list.origin}
+                provider={provider}
+                onSelectProvider={setProvider}
+                onClose={() => setList(null)}
+              />
+            )}
+          </AnimatePresence>,
+          screenEl,
+        )}
     </div>
   )
 }
