@@ -494,6 +494,30 @@ const PROTOTYPES: {
   },
 ]
 
+const GROUP_TITLES: Record<string, string> = {
+  '1': 'Home',
+  '2': 'Transaction',
+  '3': 'Receipt',
+  '4': 'Receipt Objects',
+  '5': 'Projects',
+  '6': 'Goo Loader',
+  '7': 'Match Scores',
+  '8': 'List Result Variants',
+}
+
+/** Prototypes bucketed by the number in their tag, in registry order. */
+const PROTOTYPE_GROUPS = PROTOTYPES.reduce<
+  { number: string; items: typeof PROTOTYPES }[]
+>((groups, prototype) => {
+  const number = prototype.tag.match(/^\d+/)?.[0] ?? prototype.tag
+  const current = groups.at(-1)
+  if (current?.number === number) current.items.push(prototype)
+  else groups.push({ number, items: [prototype] })
+  return groups
+}, [])
+
+const groupOf = (tag: string) => tag.match(/^\d+/)?.[0] ?? tag
+
 /** Tag-6 stage: tap anywhere to kill the loader and watch it be reborn. */
 function LoaderArcDemo() {
   const [generation, setGeneration] = useState(0)
@@ -533,6 +557,13 @@ function useActivePrototype() {
 export function App() {
   const activeId = useActivePrototype()
   const active = PROTOTYPES.find((p) => p.id === activeId) ?? PROTOTYPES[0]
+  const activeGroup = groupOf(active.tag)
+
+  // Only the section you're in starts open; jumping by hash opens its section.
+  const [openGroups, setOpenGroups] = useState<string[]>([activeGroup])
+  useEffect(() => {
+    setOpenGroups((open) => (open.includes(activeGroup) ? open : [...open, activeGroup]))
+  }, [activeGroup])
 
   return (
     <>
@@ -548,44 +579,83 @@ export function App() {
         <p className="mb-3 text-[11px] font-medium tracking-[0.08em] uppercase text-ink-tertiary">
           Prototypes
         </p>
-        <ol className="flex flex-col gap-1.5">
-          {PROTOTYPES.map((p) => {
-            const isActive = p.id === active.id
-            const isSub = p.tag.length > 1
+        <ol className="flex max-h-[80vh] flex-col gap-1.5 overflow-y-auto">
+          {PROTOTYPE_GROUPS.map(({ number, items }) => {
+            const title = GROUP_TITLES[number] ?? number
+            const isOpen = openGroups.includes(number)
+
+            // A section with no lettered directions (3. Receipt) is its own
+            // link — nothing to disclose.
+            if (items.length === 1 && items[0].tag === number) {
+              const only = items[0]
+              return (
+                <li key={number}>
+                  <a
+                    href={`#${only.id}`}
+                    className={`text-[13px] transition-colors duration-150 ${
+                      only.id === active.id
+                        ? 'font-medium text-ink'
+                        : 'text-ink-tertiary hover:text-ink-secondary'
+                    }`}
+                  >
+                    {number}. {title}
+                  </a>
+                </li>
+              )
+            }
+
             return (
-              <li key={p.id} className={isSub ? 'pl-3' : ''}>
-                {/* Group headings above the first lettered direction. */}
-                {p.tag === '1A' && (
-                  <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">1. Home</p>
-                )}
-                {p.tag === '2A' && (
-                  <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">2. Transaction</p>
-                )}
-                {p.tag === '4A' && (
-                  <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">4. Receipt Objects</p>
-                )}
-                {p.tag === '5A' && (
-                  <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">5. Projects</p>
-                )}
-                {p.tag === '6A' && (
-                  <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">6. Goo Loader</p>
-                )}
-                {p.tag === '7A' && (
-                  <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">7. Match Scores</p>
-                )}
-                {p.tag === '8A' && (
-                  <p className="-ml-3 mb-1 text-[13px] text-ink-tertiary">8. List Result Variants</p>
-                )}
-                <a
-                  href={`#${p.id}`}
-                  className={`text-[13px] transition-colors duration-150 ${
-                    isActive
-                      ? 'font-medium text-ink'
+              <li key={number}>
+                <button
+                  type="button"
+                  aria-expanded={isOpen}
+                  onClick={() =>
+                    setOpenGroups((open) =>
+                      open.includes(number)
+                        ? open.filter((n) => n !== number)
+                        : [...open, number],
+                    )
+                  }
+                  className={`flex w-full items-center gap-1 text-left text-[13px] transition-colors duration-150 ${
+                    number === activeGroup
+                      ? 'text-ink-secondary'
                       : 'text-ink-tertiary hover:text-ink-secondary'
                   }`}
                 >
-                  {p.tag}. {p.label}
-                </a>
+                  <svg
+                    viewBox="0 0 8 8"
+                    aria-hidden="true"
+                    className={`h-2 w-2 shrink-0 transition-transform duration-200 ${
+                      isOpen ? 'rotate-90' : ''
+                    }`}
+                  >
+                    <path d="M2.5 1 6 4 2.5 7" fill="none" stroke="currentColor" strokeWidth="1.2" />
+                  </svg>
+                  {number}. {title}
+                </button>
+                <div
+                  className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
+                    isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                  }`}
+                >
+                  <ol className="overflow-hidden">
+                    {items.map((p, i) => (
+                      <li key={p.id} className={`pl-6 ${i === 0 ? 'pt-1' : 'pt-1.5'}`}>
+                        <a
+                          href={`#${p.id}`}
+                          tabIndex={isOpen ? undefined : -1}
+                          className={`text-[13px] transition-colors duration-150 ${
+                            p.id === active.id
+                              ? 'font-medium text-ink'
+                              : 'text-ink-tertiary hover:text-ink-secondary'
+                          }`}
+                        >
+                          {p.tag}. {p.label}
+                        </a>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
               </li>
             )
           })}
