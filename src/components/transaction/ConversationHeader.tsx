@@ -10,6 +10,7 @@
  */
 import { motion } from 'framer-motion'
 import type { ReactNode } from 'react'
+import { ProgressiveBlur } from '../shared/ProgressiveBlur'
 
 /** Bare glyph button — 44px hit target, ink strokes, no container. */
 function GlyphButton({
@@ -57,17 +58,14 @@ export function ConversationHeader({
       style={{ paddingTop: 'calc(var(--safe-top) + 6px)' }}
     >
       {/* Protective scrim — the thread scrolls up behind the header, so a
-          canvas fade keeps the chrome legible instead of colliding with
-          cards and copy sliding beneath it. */}
+          progressive blur keeps the chrome legible: cards and copy melt out
+          toward the top edge instead of fading under paint. */}
       {scrim && (
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[116px]"
-        style={{
-          background:
-            'linear-gradient(to bottom, #fcfcfc 0%, #fcfcfc 50%, rgba(252,252,252,0.75) 70%, rgba(252,252,252,0) 100%)',
-        }}
-      />
+        <ProgressiveBlur
+          side="top"
+          className="absolute inset-x-0 top-0 -z-10 h-[116px]"
+          tint="linear-gradient(to bottom, rgba(252,252,252,0.7) 0%, rgba(252,252,252,0.25) 45%, rgba(252,252,252,0) 80%)"
+        />
       )}
       {/* Collapse */}
       <div className="flex justify-start">

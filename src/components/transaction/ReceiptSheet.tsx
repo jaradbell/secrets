@@ -13,6 +13,7 @@
  */
 import { motion } from 'framer-motion'
 import type { ReactNode } from 'react'
+import { ProgressiveBlur } from '../shared/ProgressiveBlur'
 
 const EASE = [0.32, 0.72, 0, 1] as const
 
@@ -542,14 +543,11 @@ export function ReceiptSheet({
         </motion.div>
       </div>
 
-      {/* Bottom scrim — content dissolves before it reaches the dock. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-[170px]"
-        style={{
-          background:
-            'linear-gradient(to top, #fcfcfc 0%, #fcfcfc 40%, rgba(252,252,252,0.8) 68%, rgba(252,252,252,0) 100%)',
-        }}
+      {/* Bottom scrim — a progressive blur, so content melts out before it
+          reaches the dock. */}
+      <ProgressiveBlur
+        className="absolute inset-x-0 bottom-0 h-[170px]"
+        tint="linear-gradient(to top, rgba(252,252,252,0.7) 0%, rgba(252,252,252,0.25) 45%, rgba(252,252,252,0) 80%)"
       />
     </motion.div>
   )

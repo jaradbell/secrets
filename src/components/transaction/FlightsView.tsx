@@ -33,7 +33,7 @@ export function FlightsView({ title = 'Sisters Birthday Weekend' }: { title?: st
 
   return (
     <div
-      className="-mx-4 flex min-h-0 flex-col self-stretch justify-start overflow-x-hidden overflow-y-auto px-4 pt-[84px] pb-8"
+      className="-mx-4 -mb-[190px] flex min-h-0 flex-col self-stretch justify-start overflow-x-hidden overflow-y-auto px-4 pt-[84px] pb-[220px]"
       style={{ scrollbarWidth: 'none' }}
     >
       {/* User turn */}

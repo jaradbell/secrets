@@ -13,6 +13,7 @@
  */
 import { motion } from 'framer-motion'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { ProgressiveBlur } from '../shared/ProgressiveBlur'
 import type { RankedResult } from './data'
 import { useReservationFlow } from '../transaction/reservationFlow'
 
@@ -498,18 +499,13 @@ export function PlaceDetailsView({
         </div>
       </div>
 
-      {/* Fixed scrim behind the voice dock — content dissolves toward the
-          sheet color instead of colliding with the floating orb. */}
-      <motion.div
-        {...FADE}
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-[230px]"
-        style={{
-          // Solid through the orb + label, still ~90% behind the chip band
-          // (bottom + 130–174px), then a quick falloff to open content.
-          background:
-            'linear-gradient(to top, #fcfcfc 0%, #fcfcfc 50%, rgba(252,252,252,0.9) 76%, rgba(252,252,252,0) 100%)',
-        }}
+      {/* Fixed scrim behind the voice dock — a progressive blur, so content
+          melts out instead of colliding with the floating orb. The layers
+          carry their own entrance fade (a fading wrapper would blank the
+          backdrop blur mid-flight). */}
+      <ProgressiveBlur
+        className="absolute inset-x-0 bottom-0 h-[230px]"
+        tint="linear-gradient(to top, rgba(252,252,252,0.75) 0%, rgba(252,252,252,0.3) 50%, rgba(252,252,252,0) 80%)"
       />
 
     </motion.div>

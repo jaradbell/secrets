@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ComponentType, type ReactNode } from 
 import { ReservationReceipt } from '../transaction/ReservationReceipt'
 import { useReservationFlow, type ReservationSlots } from '../transaction/reservationFlow'
 import { auraBus } from '../shared/auraBus'
+import { ProgressiveBlur } from '../shared/ProgressiveBlur'
 import { tripFileBus, useTripFileOpen } from '../shared/tripFileBus'
 import { EdgeAura } from './EdgeAura'
 import { LiquidDistortion } from './LiquidDistortion'
@@ -587,30 +588,31 @@ export function VoiceControl({
         )}
       </div>
 
-      {/* Protective scrim — a clean fade to the sheet color behind the dock
-          and its support text, so the copy never collides with content
-          scrolled beneath. Above the details sheet (z-30), below the dock
-          (z-40). Stands down while the trip file holds the frame — its
-          mesh floor is the backdrop there, and a white pool over it reads
-          as a stray scrim. */}
+      {/* Protective scrim — a progressive blur instead of a painted fade:
+          stacked backdrop-filter bands, blur doubling per band, each masked
+          to bite deeper than the last, so scrolled content melts into the
+          ambient floor (mesh included) with no hard cut. A whisper of sheet
+          tint rides the bottom for the label's contrast. Above the details
+          sheet (z-30), below the dock (z-40). Lives whenever the dock does —
+          threads scroll beneath it even at rest — but stands down for the
+          receipt takeover and while the trip file holds the frame. */}
       <AnimatePresence>
-        {(stage === 'followUp' || stage === 'booking') && !tripOpen && (
+        {stage !== 'receipt' && !tripOpen && (
           <motion.div
             aria-hidden
             className="pointer-events-none absolute inset-x-0 bottom-0 z-[35]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.4, ease: 'easeOut' }}
             style={{
               // Sized to the dock it protects: the pill stands taller than
               // the bare orb, which needs less — scrolled content clears the
               // fade sooner and stays interactive.
               height: followUp === 'none' ? 200 : 260,
-              background:
-                'linear-gradient(to top, #fcfcfc 0%, #fcfcfc 55%, rgba(252,252,252,0.85) 75%, rgba(252,252,252,0) 100%)',
             }}
-          />
+          >
+            <ProgressiveBlur
+              className="absolute inset-0"
+              tint="linear-gradient(to top, rgba(252,252,252,0.7) 0%, rgba(252,252,252,0.25) 45%, rgba(252,252,252,0) 80%)"
+            />
+          </motion.div>
         )}
       </AnimatePresence>
 

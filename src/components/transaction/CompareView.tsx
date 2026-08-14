@@ -23,7 +23,7 @@ import {
   useDragControls,
   useMotionValue,
 } from 'framer-motion'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type UIEvent } from 'react'
 import {
   EXTRA_RESULTS,
   PROVIDERS,
@@ -31,6 +31,7 @@ import {
   type ProviderId,
   type RankedResult,
 } from './data'
+import { ProgressiveBlur } from '../shared/ProgressiveBlur'
 import { MatchChip, matchFill, matchLook, MatchRing, RankChip, useMatchStyle } from './MatchRing'
 import { Stars } from './PlaceCardStack'
 import { useReservationFlow } from './reservationFlow'
@@ -255,10 +256,12 @@ function MatchCapsule({ rank, match }: { rank: number; match: number }) {
 }
 
 /** Filter row under the chips — sliders icon, the two sort chips (the
-    active one goes ink), then the quiet dummy filters. */
+    active one goes ink), then the quiet dummy filters. The full-bleed
+    margins live on its collapse wrapper (it hides on scroll), so this row
+    only carries the gutters back in. */
 function FilterRow({ sort, onSort }: { sort: Sort; onSort: (s: SortId) => void }) {
   return (
-    <div className="-mx-5 mt-3 overflow-x-auto px-5" style={{ scrollbarWidth: 'none' }}>
+    <div className="mt-3 overflow-x-auto px-5" style={{ scrollbarWidth: 'none' }}>
       <div className="flex w-max items-center gap-2">
         <button
           type="button"
@@ -361,8 +364,34 @@ export function CompareView({
 
   const settle = (d: Detent) => {
     setDetent(d)
+    if (d !== 'full') setFiltersHidden(false)
     sheet.start({ y: detentY(d), transition: SPRING })
   }
+
+  // Modern list chrome: scrolling down slides the filter row away (the
+  // rows own the screen); any pull back up — or landing near the top —
+  // brings it home. Direction, not position, drives it, with a small
+  // deadband so momentum jitter doesn't flicker the row.
+  const [filtersHidden, setFiltersHidden] = useState(false)
+  const lastScrollY = useRef(0)
+  const onListScroll = (e: UIEvent<HTMLDivElement>) => {
+    const top = e.currentTarget.scrollTop
+    const dy = top - lastScrollY.current
+    lastScrollY.current = top
+    if (top <= 12) setFiltersHidden(false)
+    else if (dy > 6) setFiltersHidden(true)
+    else if (dy < -6) setFiltersHidden(false)
+  }
+
+  // The frosted header floats over the list, so the list pads itself by
+  // the header's resting (filters-shown) height. Measured once on mount —
+  // the pad must NOT follow the filter collapse, or the rows would jump
+  // mid-scroll; the safe-top spacer is added per detent instead.
+  const headerBaseRef = useRef<HTMLDivElement>(null)
+  const [headerBase, setHeaderBase] = useState(132)
+  useLayoutEffect(() => {
+    if (headerBaseRef.current) setHeaderBase(headerBaseRef.current.offsetHeight)
+  }, [])
 
   // Guards row taps: a drag released over a row would also fire its click.
   const draggingRef = useRef(false)
@@ -460,7 +489,7 @@ export function CompareView({
           onDragEnd={onDragEnd}
         >
           <motion.div
-            className="flex h-full select-none flex-col overflow-hidden bg-white"
+            className="relative flex h-full select-none flex-col overflow-hidden bg-white"
             animate={{
               borderTopLeftRadius: full ? 0 : 28,
               borderTopRightRadius: full ? 0 : 28,
@@ -468,32 +497,95 @@ export function CompareView({
             transition={{ duration: 0.35, ease: EASE }}
             style={{ boxShadow: '0 -12px 44px rgba(0,0,0,0.14)' }}
           >
-            {/* Header — always the drag handle. */}
+            {/* Header — always the drag handle. It floats OVER the list on
+                a progressive blur (heavy behind the chips, melting to
+                nothing below the filters), so scrolled rows frost out
+                under the chrome instead of hard-cutting at its edge. */}
             <div
               data-compare-handle
               onPointerDown={(e) => dragControls.start(e)}
-              className="shrink-0 cursor-grab px-5 active:cursor-grabbing"
+              className="absolute inset-x-0 top-0 z-[5] cursor-grab px-5 pb-3 active:cursor-grabbing"
               style={{ touchAction: 'none' }}
             >
-              {/* Safe-top spacer arrives only at the full detent. */}
-              <motion.div
-                animate={{ height: full ? 34 : 0 }}
-                transition={{ duration: 0.35, ease: EASE }}
-              />
-              <div className="mx-auto mt-2.5 h-1 w-9 rounded-full bg-black/15" />
-              <div className="mt-3.5">
-                <ProviderChips active={provider} onSelect={onSelectProvider} />
+              {/* Frosted chrome — full-strength blur through the header's
+                  body, stepping off across the bottom ~44px so rows melt
+                  in under the filters instead of cutting. ProgressiveBlur
+                  ramps across the WHOLE band (right for thin edge scrims,
+                  too dilute for a tall header), so the bands live inline
+                  here with px-anchored masks pinned to the bottom edge. */}
+              <div aria-hidden className="pointer-events-none absolute inset-0">
+                {[
+                  { blur: 4, hold: 12, gone: 0 },
+                  { blur: 8, hold: 28, gone: 8 },
+                  { blur: 16, hold: 44, gone: 24 },
+                ].map(({ blur, hold, gone }) => {
+                  const mask = `linear-gradient(to bottom, rgb(0,0,0) 0%, rgb(0,0,0) calc(100% - ${hold}px), rgba(0,0,0,0) calc(100% - ${gone}px))`
+                  return (
+                    <div
+                      key={blur}
+                      className="absolute inset-0"
+                      style={{
+                        backdropFilter: `blur(${blur}px)`,
+                        WebkitBackdropFilter: `blur(${blur}px)`,
+                        maskImage: mask,
+                        WebkitMaskImage: mask,
+                      }}
+                    />
+                  )
+                })}
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background:
+                      'linear-gradient(to bottom, rgba(255,255,255,0.94) 0%, rgba(255,255,255,0.86) calc(100% - 44px), rgba(255,255,255,0) 100%)',
+                  }}
+                />
               </div>
-              <FilterRow sort={sort} onSort={toggleSort} />
+              <div className="relative">
+                {/* Safe-top spacer arrives only at the full detent. */}
+                <motion.div
+                  animate={{ height: full ? 34 : 0 }}
+                  transition={{ duration: 0.35, ease: EASE }}
+                />
+                <div ref={headerBaseRef}>
+                  <div className="mx-auto pt-2.5">
+                    <div className="mx-auto h-1 w-9 rounded-full bg-black/15" />
+                  </div>
+                  <div className="mt-3.5">
+                    <ProviderChips active={provider} onSelect={onSelectProvider} />
+                  </div>
+                  {/* The filter row hides on scroll-down and rides back in
+                      on scroll-up — collapsing height so the frosted zone
+                      shrinks with it. Full-bleed margins live here (the
+                      collapse must clip vertically, not the chips' bleed). */}
+                  <motion.div
+                    className="-mx-5 overflow-hidden"
+                    initial={false}
+                    animate={
+                      filtersHidden
+                        ? { height: 0, opacity: 0, y: -6 }
+                        : { height: 52, opacity: 1, y: 0 }
+                    }
+                    transition={{ duration: 0.32, ease: EASE }}
+                  >
+                    <FilterRow sort={sort} onSort={toggleSort} />
+                  </motion.div>
+                </div>
+              </div>
             </div>
 
             {/* Results — scrolls only at full; otherwise dragging anywhere
-                on the list moves the sheet between detents. */}
-            <div
+                on the list moves the sheet between detents. Rows slide
+                under the frosted header; the pad below matches its resting
+                height (plus the safe-top spacer at full). */}
+            <motion.div
+              onScroll={onListScroll}
               onPointerDown={(e) => {
                 if (!full) dragControls.start(e)
               }}
-              className={`mt-1 min-h-0 flex-1 px-5 ${full ? 'overflow-y-auto overscroll-contain' : 'overflow-hidden'}`}
+              className={`min-h-0 flex-1 px-5 ${full ? 'overflow-y-auto overscroll-contain' : 'overflow-hidden'}`}
+              animate={{ paddingTop: headerBase + 4 + (full ? 34 : 0) }}
+              transition={{ duration: 0.35, ease: EASE }}
               style={{
                 scrollbarWidth: 'none',
                 touchAction: full ? 'pan-y' : 'none',
@@ -535,7 +627,13 @@ export function CompareView({
                       />
                     </motion.div>
                   )}
-                  <div className="flex w-full items-center gap-3.5">
+                  {/* chip-below rows grow past the photo, so the thumb
+                      anchors to the top instead of floating at center. */}
+                  <div
+                    className={`flex w-full gap-3.5 ${
+                      matchStyle === 'chip-below' ? 'items-start' : 'items-center'
+                    }`}
+                  >
                   {/* 7I: the compact column — rank circle over a quiet
                       percentage, 7E's rail anatomy — leads the row from the
                       LEFT of the photo, so the standing reads before the
@@ -720,21 +818,17 @@ export function CompareView({
                   </div>
                 </motion.button>
               ))}
-            </div>
+            </motion.div>
           </motion.div>
         </motion.div>
       )}
 
-      {/* Fixed scrim behind the voice dock — solid through the dock and its
-          support text, easing out above, so list rows dissolve before they
-          reach the orb instead of colliding with it. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-[4] h-[164px]"
-        style={{
-          background:
-            'linear-gradient(to top, #ffffff 0%, #ffffff 40%, rgba(255,255,255,0.62) 66%, rgba(255,255,255,0) 100%)',
-        }}
+      {/* Fixed scrim behind the voice dock — a progressive blur, so list
+          rows melt out before they reach the orb instead of fading under
+          paint. */}
+      <ProgressiveBlur
+        className="absolute inset-x-0 bottom-0 z-[4] h-[164px]"
+        tint="linear-gradient(to top, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.25) 45%, rgba(255,255,255,0) 80%)"
       />
     </motion.div>
   )

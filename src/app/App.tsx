@@ -12,6 +12,7 @@ import { ReceiptGalleryWallet } from '../components/transaction/ReceiptGalleryWa
 import { FlightsView } from '../components/transaction/FlightsView'
 import { MatchStyleProvider } from '../components/transaction/MatchRing'
 import { ReservationProvider } from '../components/transaction/reservationFlow'
+import { SportsView } from '../components/transaction/SportsView'
 import { TransactionView } from '../components/transaction/TransactionView'
 import { EmptyState } from '../components/voice/EmptyState'
 import { GooLoader } from '../components/voice/GooLoader'
@@ -490,6 +491,21 @@ const PROTOTYPES: {
           />
         </ReservationProvider>
       </MatchStyleProvider>
+    ),
+  },
+  {
+    // Sports: one thread, three inquiries — the object changes with the
+    // question. Schedule → fixture card (2279:78979), live game →
+    // scoreboard (2377:73529), rankings → standings rows (2371:73391)
+    // dealt as a swipeable deck ranked 1–10.
+    id: 'list-results-8c',
+    tag: '8C',
+    label: 'Sports',
+    ambient: 'composer',
+    render: () => (
+      <ReservationProvider>
+        <VoiceControl followUp="none" receipt={null} idleContent={<SportsView />} />
+      </ReservationProvider>
     ),
   },
 ]

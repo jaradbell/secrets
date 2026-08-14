@@ -8,6 +8,7 @@
  */
 import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
+import { ProgressiveBlur } from '../shared/ProgressiveBlur'
 import { AIRLINES, AIRLINE_FLIGHTS, type AirlineId } from './flightData'
 import { FlightTicket } from './FlightTicket'
 import { AirlineChips } from './FlightTicket'
@@ -150,7 +151,15 @@ export function FlightListView({
 
       {/* Tickets — flat rows (Figma 2331:83404): the card shell drops in the
           list, each ticket printed straight on the canvas and split by a
-          hairline running edge to edge. */}
+          hairline running edge to edge. The relative wrapper carries a top
+          melt band so scrolled rows dissolve leaving the viewport instead
+          of clipping at the scroller's edge under the filters. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+      <ProgressiveBlur
+        side="top"
+        className="absolute inset-x-0 top-0 z-[4] h-10"
+        tint="linear-gradient(to bottom, rgba(252,252,252,0.9) 0%, rgba(252,252,252,0) 70%)"
+      />
       <div
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain pt-2"
         style={{
@@ -178,15 +187,13 @@ export function FlightListView({
           </motion.div>
         ))}
       </div>
+      </div>
 
-      {/* Scrim behind the voice dock — tickets dissolve before the orb. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-[4] h-[164px]"
-        style={{
-          background:
-            'linear-gradient(to top, #fcfcfc 0%, #fcfcfc 40%, rgba(252,252,252,0.62) 66%, rgba(252,252,252,0) 100%)',
-        }}
+      {/* Scrim behind the voice dock — tickets melt into a progressive blur
+          before the orb instead of fading under paint. */}
+      <ProgressiveBlur
+        className="absolute inset-x-0 bottom-0 z-[4] h-[164px]"
+        tint="linear-gradient(to top, rgba(252,252,252,0.7) 0%, rgba(252,252,252,0.25) 45%, rgba(252,252,252,0) 80%)"
       />
     </motion.div>
   )

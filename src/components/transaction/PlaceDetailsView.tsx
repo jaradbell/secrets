@@ -10,6 +10,7 @@
  */
 import { motion } from 'framer-motion'
 import { useEffect, useRef } from 'react'
+import { ProgressiveBlur } from '../shared/ProgressiveBlur'
 import { matchRankOf, type RankedResult } from './data'
 import { MATCH_GRADIENT, MatchRing, useMatchStyle } from './MatchRing'
 import { useReservationFlow } from './reservationFlow'
@@ -475,17 +476,13 @@ export function PlaceDetailsView({
         </motion.div>
       </div>
 
-      {/* Fixed scrim behind the voice dock — solid through the dock and its
-          support text, easing out above, so the label never collides with
-          content scrolled beneath. */}
-      <motion.div
-        {...FADE}
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-[210px]"
-        style={{
-          background:
-            'linear-gradient(to top, #fcfcfc 0%, #fcfcfc 45%, rgba(252,252,252,0.62) 68%, rgba(252,252,252,0) 100%)',
-        }}
+      {/* Fixed scrim behind the voice dock — a progressive blur, so the
+          label never collides with content scrolled beneath. The layers
+          carry their own entrance fade (a fading wrapper would blank the
+          backdrop blur mid-flight). */}
+      <ProgressiveBlur
+        className="absolute inset-x-0 bottom-0 h-[210px]"
+        tint="linear-gradient(to top, rgba(252,252,252,0.7) 0%, rgba(252,252,252,0.25) 45%, rgba(252,252,252,0) 80%)"
       />
     </motion.div>
   )

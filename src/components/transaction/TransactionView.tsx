@@ -500,9 +500,12 @@ export function TransactionView({
     // the column via its own padding. Overflow clips at the padding box, so
     // wide soft layers (the card stack's ambient wash) can paint across the
     // gutters and run off the frame instead of being cut at the column edge.
+    // -mb/pb pair: the scroller also bleeds beneath the dock, so scrolled
+    // content rides under the progressive-blur scrim and melts out there
+    // instead of hard-clipping at the dock's top edge.
     <div
       ref={threadScrollRef}
-      className="-mx-4 flex min-h-0 flex-col self-stretch justify-start overflow-x-hidden overflow-y-auto px-4 pt-[84px] pb-8"
+      className="-mx-4 -mb-[190px] flex min-h-0 flex-col self-stretch justify-start overflow-x-hidden overflow-y-auto px-4 pt-[84px] pb-[220px]"
       style={{ scrollbarWidth: 'none' }}
     >
       <AnimatePresence mode="wait" initial={false}>
