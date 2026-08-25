@@ -21,6 +21,7 @@ import { GooLoaderGooey } from '../components/voice/GooLoaderGooey'
 import { GooLoaderRelay } from '../components/voice/GooLoaderRelay'
 import { HomeStates } from '../components/voice/HomeStates'
 import { ProjectGridHome } from '../components/home/ProjectGridHome'
+import { SecretsDemoHome } from '../components/demo/SecretsDemoHome'
 import { MoodboardHome } from '../components/projects/MoodboardHome'
 import { VoiceControl } from '../components/voice/VoiceControl'
 
@@ -37,6 +38,16 @@ const PROTOTYPES: {
   ambient: 'full' | 'composer'
   render: () => ReactNode
 }[] = [
+  {
+    // 1:1 fork of 5A's Moodboard (components copied to src/components/demo/)
+    // — the working surface for the Secrets demo, kept apart so it can
+    // drift from 5A freely.
+    id: 'secrets-demo',
+    tag: 'xx',
+    label: 'Secrets Demo',
+    ambient: 'composer',
+    render: () => <SecretsDemoHome />,
+  },
   {
     id: 'empty-state',
     tag: '1A',
@@ -526,6 +537,7 @@ const PROTOTYPES: {
 ]
 
 const GROUP_TITLES: Record<string, string> = {
+  xx: 'Secrets Demo',
   '1': 'Home',
   '2': 'Transaction',
   '3': 'Receipt',
