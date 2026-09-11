@@ -15,7 +15,7 @@ import { Squircle } from '@squircle-js/react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { Airline, FlightOption } from './flightData'
+import { AIRLINE_FLIGHTS, type Airline, type FlightOption } from './flightData'
 import {
   cardBrandOf,
   flightBooking,
@@ -50,8 +50,10 @@ export function CancelledFlightArtifact({ label }: { label: string }) {
         <circle cx="12" cy="12" r="9" />
         <path d="M5.8 5.8 18.2 18.2" />
       </svg>
-      <span className="text-[12px] text-ink-tertiary">
-        Checkout cancelled &mdash; {label} draft discarded
+      {/* Short enough to hold one line — a wrapped orphan reads worse
+          than the terser sentence (the icon carries "cancelled"). */}
+      <span className="text-[12px] whitespace-nowrap text-ink-tertiary">
+        Cancelled &mdash; {label} draft discarded
       </span>
     </motion.div>
   )
@@ -326,6 +328,73 @@ function LinkSheet({
   )
 }
 
+/** Cabin tiers per airline — deltas price a tier against the base fare,
+    and one premium tier per carrier is sold out (the quiet error state:
+    an option that exists but can't be had on this flight). */
+const CABIN_TIERS: Record<string, { label: string; delta: number; soldOut?: boolean }[]> = {
+  southwest: [
+    { label: 'Economic Class', delta: 0 },
+    { label: 'Business Class', delta: 152 },
+    { label: 'Business Select', delta: 238, soldOut: true },
+  ],
+  delta: [
+    { label: 'Main Cabin', delta: 0 },
+    { label: 'Comfort+', delta: 86 },
+    { label: 'First Class', delta: 214, soldOut: true },
+  ],
+  united: [
+    { label: 'Economy', delta: 0 },
+    { label: 'Economy Plus', delta: 68 },
+    { label: 'United First', delta: 210, soldOut: true },
+  ],
+}
+
+const tierDelta = (airlineId: string, cabin: string) =>
+  CABIN_TIERS[airlineId]?.find((t) => t.label === cabin)?.delta ?? 0
+
+/** The dates around the ask. Some days carry the booked departure at a
+    drifted fare; on others that departure doesn't fly — the loud error
+    state — and the nearest departures are offered instead. */
+type DateOption =
+  | { date: string; kind: 'available'; delta: number }
+  | {
+      date: string
+      kind: 'unavailable'
+      alts: { departs: string; arrives: string; delta: number }[]
+    }
+
+const DATE_OPTIONS: DateOption[] = [
+  { date: 'Thu May 23rd', kind: 'available', delta: -12 },
+  { date: 'Fri May 24th', kind: 'available', delta: 0 },
+  {
+    date: 'Sat May 25th',
+    kind: 'unavailable',
+    alts: [
+      { departs: '9:40 AM', arrives: '11:55 AM', delta: 24 },
+      { departs: '6:05 PM', arrives: '8:20 PM', delta: -18 },
+    ],
+  },
+  {
+    date: 'Sun May 26th',
+    kind: 'unavailable',
+    alts: [
+      { departs: '7:20 AM', arrives: '9:35 AM', delta: 36 },
+      { departs: '4:45 PM', arrives: '7:00 PM', delta: 12 },
+    ],
+  },
+  { date: 'Mon May 27th', kind: 'available', delta: 18 },
+]
+
+/** Which draft fact a picker sheet is editing. */
+type FieldSheet = 'date' | 'flight' | 'cabin' | 'passengers'
+
+const SHEET_TITLES: Record<FieldSheet, string> = {
+  date: 'Choose a date',
+  flight: 'Choose a departure',
+  cabin: 'Choose a cabin',
+  passengers: 'How many passengers?',
+}
+
 /** Group a raw card number into 4-digit runs as it's typed. */
 const formatCardNumber = (raw: string) =>
   raw
@@ -362,7 +431,21 @@ export function FlightDraftCard({
   const [face, setFace] = useState<'summary' | 'payment'>('summary')
   const [confirmingCancel, setConfirmingCancel] = useState(false)
   const [passengers, setPassengers] = useState(1)
-  const [sheet, setSheet] = useState(false)
+  // The draft's own copy of the flight — date / departure / cabin edits
+  // fold into it, so what you pay for is exactly what the card says.
+  const [draftFlight, setDraftFlight] = useState<FlightOption>(flight)
+  const [cabin, setCabin] = useState(flight.cabin)
+  const [sheet, setSheet] = useState<FieldSheet | null>(null)
+  // A picked date the booked departure doesn't fly — the sheet turns into
+  // the unavailability face (alternatives or keep the current date).
+  const [dateHiccup, setDateHiccup] = useState<Extract<
+    DateOption,
+    { kind: 'unavailable' }
+  > | null>(null)
+  const closeSheet = () => {
+    setSheet(null)
+    setDateHiccup(null)
+  }
   // Wallet lanes ride their own sheets (Apple Pay's Face ID confirm, Link's
   // texted code); the card lane detours through the save-to-wallet ask.
   const [walletSheet, setWalletSheet] = useState<null | 'applepay' | 'link'>(null)
@@ -381,16 +464,20 @@ export function FlightDraftCard({
   }, [])
 
   const brand = airline.brandColor
-  const total = flight.price * passengers
+  // Per-seat fare: the flight's price re-based onto the chosen cabin tier.
+  const unit = draftFlight.price - tierDelta(airline.id, draftFlight.cabin) + tierDelta(airline.id, cabin)
+  const total = unit * passengers
+  /** The flight as edited — what actually gets booked and kept. */
+  const bookedFlight = (): FlightOption => ({ ...draftFlight, cabin, price: unit })
 
   /** Any lane lands here: snapshot the booking for the receipt surfaces,
       then hand the flow a complete intent — it books, then blooms. */
   const pay = (method: FlightPaymentMethod, opts?: { saveToWallet?: boolean }) => {
     if (!flow || processing) return
-    setSheet(false)
+    closeSheet()
     setWalletSheet(null)
     setSavePrompt(false)
-    flightBooking.flight = flight
+    flightBooking.flight = bookedFlight()
     flightBooking.airline = airline
     flightBooking.passengers = passengers
     flightBooking.method = method
@@ -399,17 +486,25 @@ export function FlightDraftCard({
       method === 'card' ? cardNumber.replace(/\D/g, '').slice(-4) : undefined
     flightBooking.savedToWallet = method === 'card' ? !!opts?.saveToWallet : undefined
     flightBooking.total = total
-    flow.begin({ date: flight.date, time: flight.departs, party: passengers }, flight.id)
+    flow.begin(
+      { date: draftFlight.date, time: draftFlight.departs, party: passengers },
+      draftFlight.id,
+    )
   }
 
-  const ledger: { label: string; value: string; edit?: () => void }[] = [
-    { label: 'Date', value: flight.date },
-    { label: 'Flight', value: `${flight.departs} \u2013 ${flight.arrives} \u00B7 ${flight.duration}` },
-    { label: 'Cabin', value: flight.cabin },
+  // Every fact is editable — each row opens its own picker sheet.
+  const ledger: { id: FieldSheet; label: string; value: string }[] = [
+    { id: 'date', label: 'Date', value: draftFlight.date },
     {
+      id: 'flight',
+      label: 'Flight',
+      value: `${draftFlight.departs} \u2013 ${draftFlight.arrives} \u00B7 ${draftFlight.duration}`,
+    },
+    { id: 'cabin', label: 'Cabin', value: cabin },
+    {
+      id: 'passengers',
       label: 'Passengers',
       value: passengers === 1 ? '1 passenger' : `${passengers} passengers`,
-      edit: () => setSheet(true),
     },
   ]
 
@@ -452,7 +547,7 @@ export function FlightDraftCard({
                     Cancel this booking?
                   </p>
                   <p className="text-[12.5px] leading-relaxed text-ink-tertiary">
-                    The draft for the {flight.departs} {airline.name} flight will be discarded
+                    The draft for the {draftFlight.departs} {airline.name} flight will be discarded
                     &mdash; nothing has been charged.
                   </p>
                 </div>
@@ -585,9 +680,9 @@ export function FlightDraftCard({
                 >
                   <div className="flex flex-col gap-[2px]">
                     <p className="text-[19px] leading-tight font-extrabold tracking-[-0.02em] text-ink">
-                      {flight.fromCode}
+                      {draftFlight.fromCode}
                     </p>
-                    <p className="text-[11.5px] text-ink-tertiary">{flight.departs}</p>
+                    <p className="text-[11.5px] text-ink-tertiary">{draftFlight.departs}</p>
                   </div>
                   <div className="relative mx-3 h-[30px] flex-1 max-w-[120px]">
                     <img src="/flights/route-line.svg" alt="" draggable={false} className="absolute top-[10px] left-0 h-2 w-full" />
@@ -595,34 +690,33 @@ export function FlightDraftCard({
                   </div>
                   <div className="flex flex-col items-end gap-[2px]">
                     <p className="text-[19px] leading-tight font-extrabold tracking-[-0.02em] text-ink">
-                      {flight.toCode}
+                      {draftFlight.toCode}
                     </p>
-                    <p className="text-[11.5px] text-ink-tertiary">{flight.arrives}</p>
+                    <p className="text-[11.5px] text-ink-tertiary">{draftFlight.arrives}</p>
                   </div>
                 </div>
 
-                {/* The facts — stacked ledger rows; passengers is the one
-                    editable slot (it multiplies the fare). */}
+                {/* The facts — stacked ledger rows, every one editable:
+                    each opens its own picker sheet, and the total re-adds
+                    itself as the facts move. */}
                 <div className="flex flex-col rounded-[16px] bg-black/[0.03]">
                   {ledger.map((f, i) => (
                     <button
-                      key={f.label}
+                      key={f.id}
                       type="button"
-                      disabled={!f.edit}
-                      aria-label={f.edit ? `Edit ${f.label.toLowerCase()}` : undefined}
-                      onClick={f.edit}
-                      className={`flex h-[42px] items-center justify-between gap-3 px-4 text-left outline-none transition-colors duration-150 ${
-                        f.edit ? 'active:bg-black/[0.04]' : ''
-                      } ${i > 0 ? 'border-t border-black/[0.05]' : 'rounded-t-[16px]'}`}
+                      disabled={processing}
+                      aria-label={`Edit ${f.label.toLowerCase()}`}
+                      onClick={() => setSheet(f.id)}
+                      className={`flex h-[42px] items-center justify-between gap-3 px-4 text-left outline-none transition-colors duration-150 active:bg-black/[0.04] ${
+                        i > 0 ? 'border-t border-black/[0.05]' : 'rounded-t-[16px]'
+                      }`}
                     >
                       <span className="text-[12px] text-ink-tertiary">{f.label}</span>
                       <span className="flex items-center gap-1.5 truncate text-[13.5px] font-semibold text-ink">
                         {f.value}
-                        {f.edit && (
-                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9a9a9a" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-                            <path d="m9 5 7 7-7 7" />
-                          </svg>
-                        )}
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9a9a9a" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                          <path d="m9 5 7 7-7 7" />
+                        </svg>
                       </span>
                     </button>
                   ))}
@@ -676,11 +770,11 @@ export function FlightDraftCard({
                     (carrier + number + route), facts on the quiet line. */}
                 <div className="-mt-1.5 flex flex-col gap-[3px]">
                   <p className="text-[13px] font-semibold tracking-[-0.01em] text-ink">
-                    {airline.name} {flightNumber(flight.id)} &middot; {flight.fromCode} &rarr;{' '}
-                    {flight.toCode}
+                    {airline.name} {flightNumber(draftFlight.id)} &middot; {draftFlight.fromCode}{' '}
+                    &rarr; {draftFlight.toCode}
                   </p>
                   <p className="text-[11.5px] leading-snug text-ink-tertiary">
-                    {flight.date} &middot; {flight.departs} &middot;{' '}
+                    {draftFlight.date} &middot; {draftFlight.departs} &middot;{' '}
                     {passengers === 1 ? '1 passenger' : `${passengers} passengers`} &middot; taxes
                     &amp; fees included
                   </p>
@@ -787,26 +881,28 @@ export function FlightDraftCard({
         </Squircle>
       </div>
 
-      {/* Passenger sheet — one field, one sheet (the draft card's picker
-          grammar). Picking applies and dismisses in one move. */}
+      {/* Field sheets — one fact, one sheet (the draft card's picker
+          grammar). Picking applies and dismisses in one move; picks the
+          inventory can't honor turn the sheet into an error state instead
+          of failing silently. */}
       {viewport &&
         createPortal(
           <AnimatePresence>
             {sheet && (
               <>
                 <motion.div
-                  key="pax-scrim"
+                  key="field-scrim"
                   className="absolute inset-0 z-[46] bg-[rgba(20,16,28,0.28)]"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.25 }}
-                  onClick={() => setSheet(false)}
+                  onClick={closeSheet}
                 />
                 <motion.div
-                  key="pax-sheet"
+                  key={`field-sheet-${sheet}`}
                   role="dialog"
-                  aria-label="How many passengers?"
+                  aria-label={SHEET_TITLES[sheet]}
                   className="absolute inset-x-0 bottom-0 z-[47] rounded-t-[28px] bg-[#fcfcfc] px-5 pt-3 shadow-[0_-24px_70px_-24px_rgba(20,16,28,0.45)]"
                   style={{ paddingBottom: 'calc(var(--safe-bottom) + 22px)' }}
                   initial={{ y: '100%' }}
@@ -815,33 +911,284 @@ export function FlightDraftCard({
                   transition={{ duration: 0.42, ease: EASE }}
                 >
                   <div aria-hidden="true" className="mx-auto h-[5px] w-10 rounded-full bg-black/12" />
-                  <p className="mt-4 px-1 text-[15px] font-semibold tracking-[-0.01em] text-ink">
-                    How many passengers?
-                  </p>
-                  <p className="mt-1 px-1 text-[12px] text-ink-tertiary">
-                    {flight.seats} seats left at this fare
-                  </p>
-                  <div className="mt-4 grid grid-cols-6 gap-2">
-                    {Array.from({ length: flight.seats }, (_, i) => i + 1).map((n) => {
-                      const selected = passengers === n
-                      return (
-                        <button
-                          key={n}
-                          type="button"
-                          onClick={() => {
-                            setPassengers(n)
-                            setSheet(false)
-                          }}
-                          className={`flex h-12 items-center justify-center rounded-[14px] text-[13.5px] font-medium outline-none transition-colors duration-150 ${
-                            selected ? 'text-white' : 'bg-black/[0.04] text-ink active:bg-black/[0.09]'
-                          }`}
-                          style={selected ? { background: brand } : undefined}
-                        >
-                          {n}
-                        </button>
-                      )
-                    })}
-                  </div>
+
+                  {/* ── Date — availability is the real question ─────── */}
+                  {sheet === 'date' &&
+                    (dateHiccup ? (
+                      /* The picked day doesn't fly the booked departure —
+                         say so plainly, then offer the nearest ways out. */
+                      <motion.div
+                        key="date-hiccup"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.28, ease: EASE }}
+                      >
+                        <div className="mt-4 flex items-start gap-3 px-1">
+                          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-[#f6a821]/15">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c77d00" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M12 4 2.5 20h19L12 4ZM12 10.5V14M12 16.8v.2" />
+                            </svg>
+                          </span>
+                          <div className="flex flex-col gap-0.5">
+                            <p className="text-[15px] font-semibold tracking-[-0.01em] text-ink">
+                              That departure doesn&rsquo;t fly on {dateHiccup.date.split(' ')[0]}
+                            </p>
+                            <p className="text-[12.5px] leading-snug text-ink-tertiary">
+                              {airline.name} has no {draftFlight.departs} to {draftFlight.toCode}{' '}
+                              on {dateHiccup.date}. The closest departures:
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex flex-col gap-2">
+                          {dateHiccup.alts.map((alt) => (
+                            <button
+                              key={alt.departs}
+                              type="button"
+                              onClick={() => {
+                                setDraftFlight((f) => ({
+                                  ...f,
+                                  date: dateHiccup.date,
+                                  departs: alt.departs,
+                                  arrives: alt.arrives,
+                                  price: f.price + alt.delta,
+                                }))
+                                closeSheet()
+                              }}
+                              className="flex items-center justify-between rounded-[16px] bg-black/[0.04] px-4 py-3.5 text-left outline-none transition-colors duration-150 active:bg-black/[0.08]"
+                            >
+                              <span className="flex flex-col gap-px">
+                                <span className="text-[13.5px] font-semibold text-ink">
+                                  {alt.departs} &ndash; {alt.arrives}
+                                </span>
+                                <span className="text-[11.5px] text-ink-tertiary">
+                                  {dateHiccup.date} &middot; {cabin}
+                                </span>
+                              </span>
+                              <span className="flex flex-col items-end gap-px">
+                                <span className="text-[13.5px] font-bold text-ink">
+                                  ${draftFlight.price + alt.delta - tierDelta(airline.id, draftFlight.cabin) + tierDelta(airline.id, cabin)}
+                                </span>
+                                <span
+                                  className={`text-[11px] font-medium ${alt.delta > 0 ? 'text-[#c77d00]' : 'text-[#1e9e56]'}`}
+                                >
+                                  {alt.delta > 0 ? `+$${alt.delta}` : `\u2212$${Math.abs(alt.delta)}`}{' '}
+                                  vs current
+                                </span>
+                              </span>
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setDateHiccup(null)}
+                            className="flex h-11 w-full items-center justify-center rounded-full bg-black/[0.05] text-[13px] font-semibold text-ink outline-none transition-colors duration-150 active:bg-black/[0.09]"
+                          >
+                            Keep {draftFlight.date}
+                          </button>
+                        </div>
+                      </motion.div>
+                    ) : (
+                      <div>
+                        <p className="mt-4 px-1 text-[15px] font-semibold tracking-[-0.01em] text-ink">
+                          {SHEET_TITLES.date}
+                        </p>
+                        <div className="mt-4 flex flex-col gap-2">
+                          {DATE_OPTIONS.map((opt) => {
+                            const selected = opt.date === draftFlight.date
+                            return (
+                              <button
+                                key={opt.date}
+                                type="button"
+                                onClick={() => {
+                                  if (selected) return closeSheet()
+                                  if (opt.kind === 'unavailable') return setDateHiccup(opt)
+                                  setDraftFlight((f) => ({
+                                    ...f,
+                                    date: opt.date,
+                                    price: f.price + opt.delta,
+                                  }))
+                                  closeSheet()
+                                }}
+                                className={`flex items-center justify-between rounded-[14px] px-4 py-3 text-left outline-none transition-colors duration-150 ${
+                                  selected
+                                    ? 'text-white'
+                                    : 'bg-black/[0.04] text-ink active:bg-black/[0.09]'
+                                }`}
+                                style={selected ? { background: brand } : undefined}
+                              >
+                                <span className="text-[13.5px] font-medium">{opt.date}</span>
+                                <span
+                                  className={`text-[11.5px] ${selected ? 'text-white/70' : 'text-ink-tertiary'}`}
+                                >
+                                  {selected
+                                    ? 'Current'
+                                    : opt.kind === 'unavailable'
+                                      ? `No ${draftFlight.departs}`
+                                      : opt.delta === 0
+                                        ? 'Same fare'
+                                        : opt.delta > 0
+                                          ? `+$${opt.delta}`
+                                          : `\u2212$${Math.abs(opt.delta)}`}
+                                </span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
+
+                  {/* ── Departure — swap onto a sibling flight ────────── */}
+                  {sheet === 'flight' && (
+                    <div>
+                      <p className="mt-4 px-1 text-[15px] font-semibold tracking-[-0.01em] text-ink">
+                        {SHEET_TITLES.flight}
+                      </p>
+                      <div className="mt-4 flex flex-col gap-2">
+                        {AIRLINE_FLIGHTS[airline.id].map((f) => {
+                          const selected = f.departs === draftFlight.departs
+                          const short = f.seats < passengers
+                          return (
+                            <button
+                              key={f.id}
+                              type="button"
+                              disabled={short}
+                              onClick={() => {
+                                if (!selected) {
+                                  setDraftFlight({ ...f, date: draftFlight.date })
+                                  setCabin(f.cabin)
+                                }
+                                closeSheet()
+                              }}
+                              className={`flex items-center justify-between rounded-[16px] px-4 py-3 text-left outline-none transition-colors duration-150 ${
+                                selected
+                                  ? 'text-white'
+                                  : short
+                                    ? 'bg-black/[0.02]'
+                                    : 'bg-black/[0.04] text-ink active:bg-black/[0.09]'
+                              }`}
+                              style={selected ? { background: brand } : undefined}
+                            >
+                              <span className="flex flex-col gap-px">
+                                <span
+                                  className={`text-[13.5px] font-semibold ${short ? 'text-ink-tertiary line-through' : ''}`}
+                                >
+                                  {f.departs} &ndash; {f.arrives}
+                                </span>
+                                <span
+                                  className={`text-[11.5px] ${selected ? 'text-white/70' : 'text-ink-tertiary'}`}
+                                >
+                                  {short
+                                    ? `Only ${f.seats} ${f.seats === 1 ? 'seat' : 'seats'} left \u2014 you have ${passengers} passengers`
+                                    : `${f.cabin} \u00B7 ${f.seats} seats`}
+                                </span>
+                              </span>
+                              <span
+                                className={`text-[13.5px] font-bold ${short ? 'text-ink-tertiary' : ''}`}
+                              >
+                                ${f.price}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Cabin — tiers priced against the base fare ────── */}
+                  {sheet === 'cabin' && (
+                    <div>
+                      <p className="mt-4 px-1 text-[15px] font-semibold tracking-[-0.01em] text-ink">
+                        {SHEET_TITLES.cabin}
+                      </p>
+                      <div className="mt-4 flex flex-col gap-2">
+                        {(CABIN_TIERS[airline.id] ?? []).map((t) => {
+                          const selected = t.label === cabin
+                          const price =
+                            draftFlight.price - tierDelta(airline.id, draftFlight.cabin) + t.delta
+                          return (
+                            <button
+                              key={t.label}
+                              type="button"
+                              disabled={!!t.soldOut}
+                              onClick={() => {
+                                setCabin(t.label)
+                                closeSheet()
+                              }}
+                              className={`flex items-center justify-between rounded-[16px] px-4 py-3 text-left outline-none transition-colors duration-150 ${
+                                selected
+                                  ? 'text-white'
+                                  : t.soldOut
+                                    ? 'bg-black/[0.02]'
+                                    : 'bg-black/[0.04] text-ink active:bg-black/[0.09]'
+                              }`}
+                              style={selected ? { background: brand } : undefined}
+                            >
+                              <span className="flex flex-col gap-px">
+                                <span
+                                  className={`text-[13.5px] font-semibold ${t.soldOut ? 'text-ink-tertiary line-through' : ''}`}
+                                >
+                                  {t.label}
+                                </span>
+                                <span
+                                  className={`text-[11.5px] ${selected ? 'text-white/70' : 'text-ink-tertiary'}`}
+                                >
+                                  {t.soldOut
+                                    ? 'Sold out on this flight'
+                                    : `$${price} per passenger`}
+                                </span>
+                              </span>
+                              {selected && (
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                  <path d="M5 12.5 10 17.5 19 7" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Passengers — capped by the fare's seats ───────── */}
+                  {sheet === 'passengers' && (
+                    <div>
+                      <p className="mt-4 px-1 text-[15px] font-semibold tracking-[-0.01em] text-ink">
+                        {SHEET_TITLES.passengers}
+                      </p>
+                      <p className="mt-1 px-1 text-[12px] text-ink-tertiary">
+                        {draftFlight.seats} {draftFlight.seats === 1 ? 'seat' : 'seats'} left at
+                        this fare
+                      </p>
+                      <div className="mt-4 grid grid-cols-6 gap-2">
+                        {Array.from({ length: 6 }, (_, i) => i + 1).map((n) => {
+                          const selected = passengers === n
+                          const over = n > draftFlight.seats
+                          return (
+                            <button
+                              key={n}
+                              type="button"
+                              disabled={over}
+                              aria-label={over ? `${n} \u2014 not enough seats` : `${n}`}
+                              onClick={() => {
+                                setPassengers(n)
+                                closeSheet()
+                              }}
+                              className={`flex h-12 items-center justify-center rounded-[14px] text-[13.5px] font-medium outline-none transition-colors duration-150 ${
+                                selected
+                                  ? 'text-white'
+                                  : over
+                                    ? 'bg-black/[0.02] text-ink-tertiary/50 line-through'
+                                    : 'bg-black/[0.04] text-ink active:bg-black/[0.09]'
+                              }`}
+                              style={selected ? { background: brand } : undefined}
+                            >
+                              {n}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </motion.div>
               </>
             )}
