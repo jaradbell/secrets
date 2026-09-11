@@ -1,28 +1,31 @@
 /**
  * 2E's transaction-completed state — the flight answer to
- * ReservationReceipt. Same choreography: the dock pill blooms out, this
- * dark surface fades in during the dissolve's tail, and the confirmation
- * develops on row by row. The extra fact a flight carries is the money:
- * a payment line (Apple Pay / Link / card) rides under the booking ref.
+ * ReservationReceipt, and the first domain-specific celebration moment.
+ * The dock pill blooms out and this dark surface fades in during the
+ * dissolve's tail (same handoff as dining); then, instead of a bare check
+ * disc, the flight's own iconography carries the moment: an airplane
+ * window develops in, its shade lifts on a daylight sky, your route is
+ * drawn on the glass and a plane flies it from origin to destination, and
+ * the check lands on arrival. Only then do the receipt rows develop
+ * beneath — route, airline / booking ref, the payment line, Done.
+ *
+ * Every beat is a delay off FLIGHT_T (celebrations/flightTimeline.ts).
  */
 import { motion } from 'framer-motion'
+import { FlightPorthole } from './celebrations/FlightPorthole'
+import { CELEBRATION_EASE as EASE, FLIGHT_T as T } from './celebrations/flightTimeline'
 import { AIRLINES, AIRLINE_FLIGHTS } from './flightData'
 import { flightBooking, paymentLabel } from './flightBookingStore'
 import type { ReservationSlots } from './reservationFlow'
 
-const EASE = [0.32, 0.72, 0, 1] as const
-
-/** The black waits for the pill's dissolve (see ReservationReceipt). */
-const SURFACE_DELAY_S = 0.65
-const SURFACE_S = 0.6
-
+/** Rows develop once the check has landed on the window. */
 const develop = (i: number) => ({
   initial: { opacity: 0, filter: 'blur(14px)', y: 12 },
   animate: {
     opacity: 1,
     filter: 'blur(0px)',
     y: 0,
-    transition: { delay: SURFACE_DELAY_S + 0.45 + i * 0.09, duration: 0.55, ease: EASE },
+    transition: { delay: T.textIn + i * 0.09, duration: 0.55, ease: EASE },
   },
   exit: { opacity: 0, filter: 'blur(10px)', transition: { duration: 0.12 } },
 })
@@ -57,31 +60,22 @@ export function FlightBookingReceipt({
       initial={{ opacity: 0 }}
       animate={{
         opacity: 1,
-        transition: { delay: SURFACE_DELAY_S, duration: SURFACE_S, ease: 'easeOut' },
+        transition: { delay: T.surfaceDelay, duration: T.surface, ease: 'easeOut' },
       }}
       exit={{ opacity: 0, transition: { duration: 0.35, ease: [0.4, 0, 0.2, 1] } }}
     >
       <div className="flex h-full flex-col items-center justify-center px-10 text-center">
-        <motion.div
-          {...develop(0)}
-          className="flex size-16 items-center justify-center rounded-full border border-white/15 bg-white/[0.06]"
-        >
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path
-              d="M5 12.5 10 17.5 19 7"
-              stroke="#fff"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </motion.div>
+        <FlightPorthole
+          fromCode={flight.fromCode}
+          toCode={flight.toCode}
+          brandColors={airline.glowColors}
+        />
 
-        <motion.p {...develop(1)} className="mt-6 text-[22px] font-medium leading-7 text-white">
+        <motion.p {...develop(0)} className="mt-7 text-[22px] font-medium leading-7 text-white">
           Flight booked
         </motion.p>
 
-        <motion.div {...develop(2)} className="mt-2.5">
+        <motion.div {...develop(1)} className="mt-2.5">
           <p className="text-[15px] leading-snug text-white/85">
             {flight.fromCity} ({flight.fromCode}) &rarr; {flight.toCity} ({flight.toCode})
           </p>
@@ -92,8 +86,8 @@ export function FlightBookingReceipt({
         </motion.div>
 
         <motion.div
-          {...develop(3)}
-          className="mt-8 flex w-full max-w-[264px] flex-col rounded-[18px] border border-white/10 bg-white/[0.05]"
+          {...develop(2)}
+          className="mt-7 flex w-full max-w-[264px] flex-col rounded-[18px] border border-white/10 bg-white/[0.05]"
         >
           <div className="flex items-center justify-between px-4 py-3.5">
             <span className="flex items-center gap-2.5">
@@ -128,10 +122,10 @@ export function FlightBookingReceipt({
         </motion.div>
 
         <motion.button
-          {...develop(4)}
+          {...develop(3)}
           type="button"
           onClick={onDone}
-          className="mt-10 flex h-12 w-full max-w-[264px] items-center justify-center rounded-full bg-white text-[14px] font-medium text-ink outline-none transition-transform duration-200 ease-out active:scale-[0.97]"
+          className="mt-8 flex h-12 w-full max-w-[264px] items-center justify-center rounded-full bg-white text-[14px] font-medium text-ink outline-none transition-transform duration-200 ease-out active:scale-[0.97]"
         >
           Done
         </motion.button>

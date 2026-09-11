@@ -16,6 +16,12 @@ export type Airline = {
   logo?: string
   /** Brand color — carries the ticket's price pill. */
   brandColor: string
+  /**
+   * The brand's fuller palette, for the celebration's glow (BrandGlow).
+   * Real brand colors, not derived ones — Southwest's heart gradient,
+   * Delta's reds over navy, United's blues.
+   */
+  glowColors: string[]
 }
 
 export const AIRLINES: Airline[] = [
@@ -25,6 +31,7 @@ export const AIRLINES: Airline[] = [
     icon: '/providers/delta.svg',
     logo: '/flights/delta-logo.svg',
     brandColor: '#C01933',
+    glowColors: ['#C01933', '#E3132C', '#7C0B24', '#1D2951'],
   },
   {
     id: 'southwest',
@@ -32,12 +39,14 @@ export const AIRLINES: Airline[] = [
     icon: '/providers/southwest.svg',
     logo: '/flights/southwest-logo.png',
     brandColor: '#304CB2',
+    glowColors: ['#304CB2', '#F4364C', '#FFBF27'],
   },
   {
     id: 'united',
     name: 'United',
     icon: '/providers/united.png',
     brandColor: '#0033A0',
+    glowColors: ['#0033A0', '#69B3E7', '#001A70'],
   },
 ]
 
