@@ -9,6 +9,8 @@ import { ReceiptGalleryConversation } from '../components/transaction/ReceiptGal
 import { ReceiptGalleryExpressive } from '../components/transaction/ReceiptGalleryExpressive'
 import { ReceiptGalleryTicket } from '../components/transaction/ReceiptGalleryTicket'
 import { ReceiptGalleryWallet } from '../components/transaction/ReceiptGalleryWallet'
+import { FlightBookingReceipt } from '../components/transaction/FlightBookingReceipt'
+import { FlightBookingView } from '../components/transaction/FlightBookingView'
 import { FlightsView } from '../components/transaction/FlightsView'
 import { MatchStyleProvider } from '../components/transaction/MatchRing'
 import { ReservationProvider } from '../components/transaction/reservationFlow'
@@ -130,6 +132,26 @@ const PROTOTYPES: {
           followUp="none"
           receipt={null}
           idleContent={<TransactionView variant="2d" />}
+        />
+      </ReservationProvider>
+    ),
+  },
+  {
+    // 2C's return-to-conversation grammar pointed at flights (8A's ticket
+    // objects), end to end through payment: tap a ticket, the draft appends
+    // in-thread, its payment face collects the money (Apple Pay / Link /
+    // card form), and the confirmation blooms out and lands back on the
+    // thread as a kept ticket.
+    id: 'transaction-2e',
+    tag: '2E',
+    label: 'Flight Booking',
+    ambient: 'composer',
+    render: () => (
+      <ReservationProvider>
+        <VoiceControl
+          followUp="none"
+          receipt={FlightBookingReceipt}
+          idleContent={<FlightBookingView />}
         />
       </ReservationProvider>
     ),

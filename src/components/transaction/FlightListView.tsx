@@ -9,7 +9,7 @@
 import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { ProgressiveBlur } from '../shared/ProgressiveBlur'
-import { AIRLINES, AIRLINE_FLIGHTS, type AirlineId } from './flightData'
+import { AIRLINES, AIRLINE_FLIGHTS, type AirlineId, type FlightOption } from './flightData'
 import { FlightTicket } from './FlightTicket'
 import { AirlineChips } from './FlightTicket'
 import { useReservationFlow } from './reservationFlow'
@@ -77,11 +77,15 @@ export function FlightListView({
   airline,
   onSelectAirline,
   onClose,
+  onSelectFlight,
 }: {
   origin: ListOrigin
   airline: AirlineId
   onSelectAirline: (id: AirlineId) => void
   onClose: () => void
+  /** 2E: rows become doorways — tapping a ticket drills into that flight
+      (the row element carries the morph's origin geometry). */
+  onSelectFlight?: (flight: FlightOption, el: Element) => void
 }) {
   const brand = AIRLINES.find((a) => a.id === airline)!
 
@@ -180,9 +184,20 @@ export function FlightListView({
               ease: EASE,
             }}
           >
-            <div className="px-5">
-              <FlightTicket flight={f} airline={brand} flat />
-            </div>
+            {onSelectFlight ? (
+              <button
+                type="button"
+                onClick={(e) => onSelectFlight(f, e.currentTarget)}
+                aria-label={`View the ${f.departs} flight`}
+                className="w-full px-5 text-left outline-none transition-colors duration-150 active:bg-black/[0.02]"
+              >
+                <FlightTicket flight={f} airline={brand} flat />
+              </button>
+            ) : (
+              <div className="px-5">
+                <FlightTicket flight={f} airline={brand} flat />
+              </div>
+            )}
             {i < flights.length - 1 && <div className="h-px w-full bg-[#f5f5f5]" />}
           </motion.div>
         ))}
