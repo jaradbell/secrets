@@ -13,10 +13,15 @@
  */
 import { Squircle } from '@squircle-js/react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Airline, FlightOption } from './flightData'
-import { flightBooking, type FlightPaymentMethod } from './flightBookingStore'
+import {
+  cardBrandOf,
+  flightBooking,
+  flightNumber,
+  type FlightPaymentMethod,
+} from './flightBookingStore'
 import { useReservationFlow } from './reservationFlow'
 
 const EASE = [0.32, 0.72, 0, 1] as const
@@ -61,6 +66,266 @@ function AppleMark() {
   )
 }
 
+/** Face ID glyph — corner brackets around the face. */
+function FaceIdMark({ size = 30 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 8V6a3 3 0 0 1 3-3h2M16 3h2a3 3 0 0 1 3 3v2M21 16v2a3 3 0 0 1-3 3h-2M8 21H6a3 3 0 0 1-3-3v-2" />
+      <path d="M8.5 9.5v1.2M15.5 9.5v1.2M12 9.5v4h-1M8.6 15.5a4.8 4.8 0 0 0 6.8 0" />
+    </svg>
+  )
+}
+
+/** The tiny card-on-file chip the wallet surfaces show — dyed and marked
+    for the card's network (Visa the default saved card). */
+function WalletCardChip({ brand = 'Visa' }: { brand?: string }) {
+  const bg =
+    brand === 'Mastercard'
+      ? 'linear-gradient(135deg, #3d4451 0%, #14181f 100%)'
+      : brand === 'Amex'
+        ? 'linear-gradient(135deg, #2f9de4 0%, #016fd0 100%)'
+        : 'linear-gradient(135deg, #4c6ef5 0%, #2b3fa8 100%)'
+  return (
+    <span
+      className="flex h-7 w-11 shrink-0 items-end rounded-[5px] px-1.5 pb-1"
+      style={{ background: bg }}
+    >
+      {brand === 'Mastercard' ? (
+        <span className="flex items-center pb-px" aria-hidden="true">
+          <span className="size-2 rounded-full bg-[#eb001b]" />
+          <span className="-ml-1 size-2 rounded-full bg-[#f79e1b] opacity-90" />
+        </span>
+      ) : (
+        <span className="text-[6.5px] font-bold tracking-[0.08em] text-white italic uppercase">
+          {brand === 'Amex' ? 'AMEX' : 'VISA'}
+        </span>
+      )}
+    </span>
+  )
+}
+
+/**
+ * The Apple Pay moment — sheet with the card on file, contact, and total,
+ * confirmed with a simulated Face ID pass (scan → done → the payment
+ * hands off). X backs out with nothing charged.
+ */
+function ApplePaySheet({
+  total,
+  merchant,
+  onConfirm,
+  onClose,
+}: {
+  total: number
+  merchant: string
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  const [phase, setPhase] = useState<'idle' | 'scanning' | 'done'>('idle')
+  const timers = useRef<number[]>([])
+  useEffect(() => () => timers.current.forEach(clearTimeout), [])
+
+  const confirm = () => {
+    if (phase !== 'idle') return
+    setPhase('scanning')
+    timers.current.push(
+      window.setTimeout(() => setPhase('done'), 1100),
+      window.setTimeout(onConfirm, 1800),
+    )
+  }
+
+  return (
+    <>
+      <div aria-hidden="true" className="mx-auto h-[5px] w-10 rounded-full bg-black/12" />
+
+      <div className="mt-3 flex items-center justify-between">
+        <span className="flex items-center gap-1 text-ink">
+          <AppleMark />
+          <span className="text-[17px] font-semibold tracking-[-0.01em]">Pay</span>
+        </span>
+        <button
+          type="button"
+          aria-label="Cancel Apple Pay"
+          disabled={phase !== 'idle'}
+          onClick={onClose}
+          className="flex size-8 items-center justify-center rounded-full bg-black/[0.05] outline-none transition-transform duration-150 active:scale-90 disabled:opacity-40"
+        >
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M3 3 13 13M13 3 3 13" stroke="#171717" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+
+      <div className="mt-4 flex flex-col rounded-[16px] bg-black/[0.03]">
+        <div className="flex h-[52px] items-center justify-between gap-3 px-4">
+          <span className="flex items-center gap-3">
+            <WalletCardChip />
+            <span className="flex flex-col">
+              <span className="text-[13px] font-semibold text-ink">Visa &middot;&middot; 4242</span>
+              <span className="text-[11px] text-ink-tertiary">Apple Wallet</span>
+            </span>
+          </span>
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9a9a9a" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+            <path d="m9 5 7 7-7 7" />
+          </svg>
+        </div>
+        <div className="flex h-[44px] items-center justify-between gap-3 border-t border-black/[0.05] px-4">
+          <span className="text-[12px] text-ink-tertiary">Contact</span>
+          <span className="text-[13px] font-medium text-ink">jb@icloud.com</span>
+        </div>
+        <div className="flex h-[44px] items-center justify-between gap-3 border-t border-black/[0.05] px-4">
+          <span className="text-[12px] text-ink-tertiary">Pay {merchant}</span>
+          <span className="text-[14px] font-bold text-ink">${total}</span>
+        </div>
+      </div>
+
+      {/* The confirm — Face ID carries the go. */}
+      <div className="mt-5 flex h-[92px] flex-col items-center justify-center">
+        <AnimatePresence mode="wait" initial={false}>
+          {phase === 'idle' ? (
+            <motion.button
+              key="idle"
+              type="button"
+              onClick={confirm}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, transition: { duration: 0.12 } }}
+              className="flex flex-col items-center gap-2 outline-none"
+            >
+              <span className="flex size-12 items-center justify-center rounded-full bg-ink text-white transition-transform duration-150 active:scale-95">
+                <FaceIdMark size={24} />
+              </span>
+              <span className="text-[12.5px] font-medium text-ink">Confirm with Face ID</span>
+            </motion.button>
+          ) : phase === 'scanning' ? (
+            <motion.div
+              key="scanning"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, transition: { duration: 0.12 } }}
+              className="flex flex-col items-center gap-2"
+            >
+              <motion.span
+                className="flex size-12 items-center justify-center rounded-full bg-ink text-white"
+                animate={{ scale: [1, 1.08, 1], opacity: [1, 0.75, 1] }}
+                transition={{ duration: 0.55, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                <FaceIdMark size={24} />
+              </motion.span>
+              <span className="text-[12.5px] font-medium text-ink-tertiary">Face ID&hellip;</span>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="done"
+              initial={{ opacity: 0, scale: 0.7 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 22 }}
+              className="flex flex-col items-center gap-2"
+            >
+              <span className="flex size-12 items-center justify-center rounded-full bg-[#34c759] text-white">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M5 12.5 10 17.5 19 7" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <span className="text-[12.5px] font-medium text-ink">Done</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </>
+  )
+}
+
+/**
+ * The Link moment — the saved-info lane: your email is recognized, a
+ * texted code fills in, and the saved Visa pays. The code autofills
+ * (hardcoded flow) so the demo never waits on real input.
+ */
+const LINK_CODE = ['8', '2', '4', '9', '0', '3']
+
+function LinkSheet({
+  total,
+  onConfirm,
+  onClose,
+}: {
+  total: number
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  const [filled, setFilled] = useState(0)
+  const ready = filled >= LINK_CODE.length
+
+  // The texted code arrives and types itself in.
+  useEffect(() => {
+    const timers = LINK_CODE.map((_, i) =>
+      window.setTimeout(() => setFilled(i + 1), 950 + i * 150),
+    )
+    return () => timers.forEach(clearTimeout)
+  }, [])
+
+  return (
+    <>
+      <div aria-hidden="true" className="mx-auto h-[5px] w-10 rounded-full bg-black/12" />
+
+      <div className="mt-3 flex items-center justify-between">
+        <span className="flex h-7 items-center rounded-full bg-[#00d66f] px-3 text-[13px] font-bold tracking-[-0.02em] text-[#011e0f] italic">
+          Link
+        </span>
+        <button
+          type="button"
+          aria-label="Cancel Link"
+          onClick={onClose}
+          className="flex size-8 items-center justify-center rounded-full bg-black/[0.05] outline-none transition-transform duration-150 active:scale-90"
+        >
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M3 3 13 13M13 3 3 13" stroke="#171717" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+
+      <p className="mt-4 text-[15px] font-semibold tracking-[-0.01em] text-ink">Welcome back</p>
+      <p className="mt-0.5 text-[12.5px] text-ink-tertiary">
+        jb@fullcountcreative.com &middot; enter the code we texted to (415) &bull;&bull;&bull; 4821
+      </p>
+
+      {/* The code, typing itself in. */}
+      <div className="mt-4 flex gap-2">
+        {LINK_CODE.map((digit, i) => (
+          <span
+            key={i}
+            className={`flex h-12 flex-1 items-center justify-center rounded-[12px] text-[17px] font-bold text-ink transition-colors duration-150 ${
+              i < filled ? 'bg-[#00d66f]/15' : 'bg-black/[0.04]'
+            }`}
+            style={i < filled ? { boxShadow: 'inset 0 0 0 1.5px #00d66f' } : undefined}
+          >
+            {i < filled ? digit : ''}
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-4 flex items-center justify-between rounded-[16px] bg-black/[0.03] px-4 py-3">
+        <span className="flex items-center gap-3">
+          <WalletCardChip />
+          <span className="text-[13px] font-semibold text-ink">Visa &middot;&middot; 4242</span>
+        </span>
+        <span className="text-[11.5px] text-ink-tertiary">Saved with Link</span>
+      </div>
+
+      <button
+        type="button"
+        disabled={!ready}
+        onClick={onConfirm}
+        className={`mt-4 flex h-12 w-full items-center justify-center rounded-full text-[14px] font-bold outline-none transition-all duration-200 ${
+          ready
+            ? 'bg-[#00d66f] text-[#011e0f] active:brightness-95'
+            : 'bg-black/[0.05] text-ink-tertiary'
+        }`}
+      >
+        {ready ? `Pay $${total}` : 'Verifying\u2026'}
+      </button>
+    </>
+  )
+}
+
 /** Group a raw card number into 4-digit runs as it's typed. */
 const formatCardNumber = (raw: string) =>
   raw
@@ -98,6 +363,10 @@ export function FlightDraftCard({
   const [confirmingCancel, setConfirmingCancel] = useState(false)
   const [passengers, setPassengers] = useState(1)
   const [sheet, setSheet] = useState(false)
+  // Wallet lanes ride their own sheets (Apple Pay's Face ID confirm, Link's
+  // texted code); the card lane detours through the save-to-wallet ask.
+  const [walletSheet, setWalletSheet] = useState<null | 'applepay' | 'link'>(null)
+  const [savePrompt, setSavePrompt] = useState(false)
 
   // Card-form fields — the manual lane next to the one-tap wallets.
   const [cardNumber, setCardNumber] = useState('')
@@ -116,15 +385,19 @@ export function FlightDraftCard({
 
   /** Any lane lands here: snapshot the booking for the receipt surfaces,
       then hand the flow a complete intent — it books, then blooms. */
-  const pay = (method: FlightPaymentMethod) => {
+  const pay = (method: FlightPaymentMethod, opts?: { saveToWallet?: boolean }) => {
     if (!flow || processing) return
     setSheet(false)
+    setWalletSheet(null)
+    setSavePrompt(false)
     flightBooking.flight = flight
     flightBooking.airline = airline
     flightBooking.passengers = passengers
     flightBooking.method = method
+    flightBooking.cardBrand = method === 'card' ? cardBrandOf(cardNumber) : undefined
     flightBooking.cardLast4 =
       method === 'card' ? cardNumber.replace(/\D/g, '').slice(-4) : undefined
+    flightBooking.savedToWallet = method === 'card' ? !!opts?.saveToWallet : undefined
     flightBooking.total = total
     flow.begin({ date: flight.date, time: flight.departs, party: passengers }, flight.id)
   }
@@ -201,6 +474,63 @@ export function FlightDraftCard({
                     className="flex h-11 flex-1 items-center justify-center rounded-full bg-ink text-[13px] font-semibold text-white outline-none transition-colors duration-150 active:bg-ink/85"
                   >
                     Cancel booking
+                  </button>
+                </div>
+              </motion.div>
+            ) : savePrompt ? (
+              /* Card entered — one useful ask before the charge: keep it
+                 in the wallet for future purchases? Either answer pays. */
+              <motion.div
+                key="save-prompt"
+                initial={{ opacity: 0, scale: 0.98, filter: 'blur(4px)' }}
+                animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                exit={{ opacity: 0, scale: 0.98, filter: 'blur(4px)' }}
+                transition={{ duration: 0.22, ease: EASE }}
+                className="flex flex-col gap-4 px-5 pt-4.5 pb-5"
+              >
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    aria-label="Back to payment"
+                    onClick={() => setSavePrompt(false)}
+                    className="-ml-1.5 flex size-7 items-center justify-center rounded-full outline-none transition-colors duration-150 active:bg-black/[0.06]"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9a9a9a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="m15 5-7 7 7 7" />
+                    </svg>
+                  </button>
+                  <span className="text-[12.5px] font-semibold text-ink">Save your card?</span>
+                  <span className="w-7" aria-hidden="true" />
+                </div>
+
+                <div className="flex items-center gap-3 rounded-[16px] bg-black/[0.03] px-4 py-3">
+                  <WalletCardChip brand={cardBrandOf(cardNumber)} />
+                  <div className="flex flex-col gap-px">
+                    <p className="text-[13px] font-semibold text-ink">
+                      {cardBrandOf(cardNumber)} &middot;&middot;{' '}
+                      {cardNumber.replace(/\D/g, '').slice(-4)}
+                    </p>
+                    <p className="text-[11.5px] leading-snug text-ink-tertiary">
+                      Add it to your wallet for faster checkout on future purchases.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => pay('card', { saveToWallet: true })}
+                    className="flex h-12 w-full items-center justify-center rounded-full text-[13.5px] font-semibold text-white outline-none transition-all duration-200 active:brightness-95"
+                    style={{ background: brand }}
+                  >
+                    Add to wallet &amp; pay ${total}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => pay('card')}
+                    className="flex h-11 w-full items-center justify-center rounded-full bg-black/[0.05] text-[13px] font-semibold text-ink outline-none transition-colors duration-150 active:bg-black/[0.09]"
+                  >
+                    Just pay this once
                   </button>
                 </div>
               </motion.div>
@@ -342,18 +672,26 @@ export function FlightDraftCard({
                   <span className="text-[12.5px] font-bold text-ink">${total}</span>
                 </div>
 
-                <p className="-mt-1 text-[11.5px] leading-snug text-ink-tertiary">
-                  {airline.name} {flight.fromCode} &rarr; {flight.toCode} &middot; {flight.date}{' '}
-                  &middot; {passengers === 1 ? '1 passenger' : `${passengers} passengers`}, incl.
-                  taxes &amp; fees
-                </p>
+                {/* What the money buys — the flight named like a ticket
+                    (carrier + number + route), facts on the quiet line. */}
+                <div className="-mt-1.5 flex flex-col gap-[3px]">
+                  <p className="text-[13px] font-semibold tracking-[-0.01em] text-ink">
+                    {airline.name} {flightNumber(flight.id)} &middot; {flight.fromCode} &rarr;{' '}
+                    {flight.toCode}
+                  </p>
+                  <p className="text-[11.5px] leading-snug text-ink-tertiary">
+                    {flight.date} &middot; {flight.departs} &middot;{' '}
+                    {passengers === 1 ? '1 passenger' : `${passengers} passengers`} &middot; taxes
+                    &amp; fees included
+                  </p>
+                </div>
 
                 {/* One-tap wallets. */}
                 <div className="flex flex-col gap-2">
                   <button
                     type="button"
                     disabled={processing}
-                    onClick={() => pay('applepay')}
+                    onClick={() => setWalletSheet('applepay')}
                     className="flex h-12 w-full items-center justify-center gap-1.5 rounded-full bg-black text-white outline-none transition-transform duration-200 ease-out active:scale-[0.98] disabled:opacity-60"
                   >
                     <AppleMark />
@@ -362,7 +700,7 @@ export function FlightDraftCard({
                   <button
                     type="button"
                     disabled={processing}
-                    onClick={() => pay('link')}
+                    onClick={() => setWalletSheet('link')}
                     className="flex h-12 w-full items-center justify-center rounded-full bg-[#00d66f] outline-none transition-transform duration-200 ease-out active:scale-[0.98] disabled:opacity-60"
                   >
                     <span className="text-[15px] font-bold tracking-[-0.02em] text-[#011e0f] italic">
@@ -421,7 +759,7 @@ export function FlightDraftCard({
                 <button
                   type="button"
                   disabled={(!cardReady && !processing) || processing}
-                  onClick={() => pay('card')}
+                  onClick={() => setSavePrompt(true)}
                   className={`flex h-12 w-full items-center justify-center rounded-full text-[13.5px] font-semibold outline-none transition-all duration-200 ${
                     cardReady || processing ? 'text-white active:brightness-95' : 'text-ink-tertiary'
                   }`}
@@ -504,6 +842,54 @@ export function FlightDraftCard({
                       )
                     })}
                   </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>,
+          viewport,
+        )}
+
+      {/* Wallet sheets — the payment lanes' own moments (Apple Pay's Face
+          ID confirm, Link's texted code), on the field sheets' material. */}
+      {viewport &&
+        createPortal(
+          <AnimatePresence>
+            {walletSheet && (
+              <>
+                <motion.div
+                  key="wallet-scrim"
+                  className="absolute inset-0 z-[46] bg-[rgba(20,16,28,0.28)]"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.25 }}
+                  onClick={() => setWalletSheet(null)}
+                />
+                <motion.div
+                  key={`wallet-sheet-${walletSheet}`}
+                  role="dialog"
+                  aria-label={walletSheet === 'applepay' ? 'Apple Pay' : 'Pay with Link'}
+                  className="absolute inset-x-0 bottom-0 z-[47] rounded-t-[28px] bg-[#fcfcfc] px-5 pt-3 shadow-[0_-24px_70px_-24px_rgba(20,16,28,0.45)]"
+                  style={{ paddingBottom: 'calc(var(--safe-bottom) + 22px)' }}
+                  initial={{ y: '100%' }}
+                  animate={{ y: 0 }}
+                  exit={{ y: '100%' }}
+                  transition={{ duration: 0.42, ease: EASE }}
+                >
+                  {walletSheet === 'applepay' ? (
+                    <ApplePaySheet
+                      total={total}
+                      merchant={airline.name}
+                      onConfirm={() => pay('applepay')}
+                      onClose={() => setWalletSheet(null)}
+                    />
+                  ) : (
+                    <LinkSheet
+                      total={total}
+                      onConfirm={() => pay('link')}
+                      onClose={() => setWalletSheet(null)}
+                    />
+                  )}
                 </motion.div>
               </>
             )}

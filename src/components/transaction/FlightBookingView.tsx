@@ -46,7 +46,9 @@ type FlightResolution =
       airline: Airline
       passengers: number
       method: FlightPaymentMethod
+      cardBrand?: string
       cardLast4?: string
+      savedToWallet?: boolean
       total: number
     }
 
@@ -217,7 +219,9 @@ export function FlightBookingView({ title = 'Sisters Birthday Weekend' }: { titl
             airline: flightBooking.airline,
             passengers: flightBooking.passengers,
             method: flightBooking.method,
+            cardBrand: flightBooking.cardBrand,
             cardLast4: flightBooking.cardLast4,
+            savedToWallet: flightBooking.savedToWallet,
             total: flightBooking.total,
           },
         },
@@ -366,8 +370,14 @@ export function FlightBookingView({ title = 'Sisters Birthday Weekend' }: { titl
                           </span>{' '}
                           is booked for {receiptShown.flight.date}, departing{' '}
                           {receiptShown.flight.departs}. Paid ${receiptShown.total} with{' '}
-                          {paymentLabel(receiptShown.method, receiptShown.cardLast4)} &mdash;
-                          boarding passes are in your email.
+                          {paymentLabel(
+                            receiptShown.method,
+                            receiptShown.cardLast4,
+                            receiptShown.cardBrand,
+                          )}{' '}
+                          &mdash; boarding passes are in your email.
+                          {receiptShown.savedToWallet &&
+                            ' Your card is saved in your wallet for next time.'}
                         </>
                       ) : (
                         ex.assistant

@@ -14,6 +14,7 @@
 import { motion } from 'framer-motion'
 import { useEffect } from 'react'
 import type { Airline, FlightOption } from './flightData'
+import { flightNumber } from './flightBookingStore'
 import { useReservationFlow } from './reservationFlow'
 
 const EASE = [0.32, 0.72, 0, 1] as const
@@ -34,12 +35,6 @@ const GATE_LETTERS = ['B7', 'C5', 'A12', 'D3', 'B12', 'C9', 'A4', 'D8']
 const gateFor = (id: string, salt: number) => {
   const n = id.split('').reduce((a, c) => a + c.charCodeAt(0), salt * 7)
   return { gate: GATE_LETTERS[n % GATE_LETTERS.length], terminal: (n % 3) + 1 }
-}
-
-/** "wn-2" → "WN 1434" — the seed ids carry the carrier code. */
-const flightNumber = (id: string) => {
-  const [code, n] = id.split('-')
-  return `${code.toUpperCase()} ${1408 + parseInt(n, 10) * 13}`
 }
 
 /** "Fri May 24th" → "FRI, MAY 24" (the overline's registry style). */

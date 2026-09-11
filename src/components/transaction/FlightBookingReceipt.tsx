@@ -110,8 +110,18 @@ export function FlightBookingReceipt({
             <span className="text-[12px] tracking-[0.06em] text-white/45">#FLT-2183</span>
           </div>
           <div className="flex items-center justify-between border-t border-white/[0.08] px-4 py-3.5">
-            <span className="text-[13px] text-white/60">
-              Paid with {paymentLabel(flightBooking.method, flightBooking.cardLast4)}
+            <span className="flex flex-col items-start gap-px">
+              <span className="text-[13px] text-white/60">
+                Paid with{' '}
+                {paymentLabel(
+                  flightBooking.method,
+                  flightBooking.cardLast4,
+                  flightBooking.cardBrand,
+                )}
+              </span>
+              {flightBooking.savedToWallet && (
+                <span className="text-[11px] text-white/35">Saved to your wallet</span>
+              )}
             </span>
             <span className="text-[13px] font-semibold text-white/85">${total}</span>
           </div>
