@@ -323,6 +323,10 @@ export function VoiceControl({
   // flight — the moment a chip (or utterance) starts one, the bar exits and
   // the orb slides back to center for the pill morph.
   const inline = !!suggestions?.length && !!flow?.focusedPlace && stage === 'none'
+  // A surface registered its primary action (8D's "Reserve now"): the dock
+  // splits — CTA left, orb right — while the dock is a plain orb.
+  const dockCta = flow?.dockCta ?? null
+  const split = !!dockCta && !isPill && !inline && !tripOpen && !receiptTakeover
   const [expanded, setExpanded] = useState(false)
   // The tray starts dealt out whenever the inline dock appears (drilling in,
   // or returning from a dismissed follow-up); collapsing it — tap the disc
@@ -713,28 +717,72 @@ export function VoiceControl({
 
         <div
           className={`relative flex items-center ${
-            inline ? (expanded ? 'w-full justify-start' : 'w-full justify-end') : 'justify-center'
+            inline
+              ? expanded
+                ? 'w-full justify-start'
+                : 'w-full justify-end'
+              : split
+                ? 'w-full justify-end gap-3'
+                : 'justify-center'
           }`}
         >
         {/* The flanks — present only while the dock is a plain orb, so
             the pill morph and inline dock keep their stage to themselves. */}
         <AnimatePresence>
-          {dockAux && !isPill && !inline && !tripOpen && (
+          {dockAux && !isPill && !inline && !tripOpen && !split && (
             <AuxButton key="aux-plus" side="left" label="New" onTap={onPlus}>
               <PlusGlyph />
             </AuxButton>
           )}
-          {dockAux && !isPill && !inline && !tripOpen && (
+          {dockAux && !isPill && !inline && !tripOpen && !split && (
             <AuxButton key="aux-keys" side="right" label="Type instead">
               <KeyboardGlyph />
             </AuxButton>
           )}
         </AnimatePresence>
+        {/* The docked CTA — a surface's primary action (8D's "Reserve now")
+            splits the dock: the pill takes the left lane, the orb rides
+            shotgun on the right as the assistant's standing invitation. */}
+        <AnimatePresence>
+          {split && dockCta && (
+            <motion.button
+              key="dock-cta"
+              type="button"
+              disabled={dockCta.disabled}
+              onClick={dockCta.onTap}
+              className={`flex h-16 flex-1 items-center gap-3 rounded-full text-left outline-none transition-[filter] duration-200 active:brightness-95 disabled:opacity-60 ${
+                dockCta.icon ? 'pr-6 pl-2.5' : 'px-6'
+              }`}
+              style={{ background: dockCta.color }}
+              initial={{ opacity: 0, x: 28, filter: 'blur(6px)' }}
+              animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, x: 28, filter: 'blur(6px)' }}
+              transition={{ duration: 0.34, ease: [0.32, 0.72, 0, 1] }}
+            >
+              {dockCta.icon && (
+                <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white">
+                  {dockCta.icon}
+                </span>
+              )}
+              <span className="flex min-w-0 flex-col">
+                <span className="text-[15px] leading-[19px] font-semibold text-white">
+                  {dockCta.label}
+                </span>
+                {dockCta.sub && (
+                  <span className="truncate text-[12px] leading-[15px] font-medium text-white/75">
+                    {dockCta.sub}
+                  </span>
+                )}
+              </span>
+            </motion.button>
+          )}
+        </AnimatePresence>
         <motion.button
           type="button"
           // Position-only layout animation so the button glides between the
-          // right-docked "Follow-up" pill and the left-anchored disc.
-          layout={suggestions?.length ? 'position' : false}
+          // right-docked "Follow-up" pill and the left-anchored disc (and
+          // aside when a docked CTA splits the row).
+          layout={suggestions?.length || dockCta ? 'position' : false}
           onPointerDown={onPointerDown}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerCancel}

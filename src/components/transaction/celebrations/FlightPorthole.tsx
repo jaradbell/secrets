@@ -276,13 +276,13 @@ export function FlightPorthole({
   const shadeAt = reduced ? T.windowIn + 0.05 : T.shadeUp
   const dimAt = reduced ? T.windowIn + 0.3 : FLIGHT_LAND
   const checkAt = reduced ? T.windowIn + 0.5 : T.checkIn
-  // The tick finishes its stroke ~0.65s after it starts (BigCheck).
-  const glowAt = checkAt + 0.55
+  // The glow departs with the plane; its lobe rides the frame alongside it.
+  const glowAt = reduced ? checkAt : T.depart
   // Daylight on the wall: in with the shade, then out as the window dims —
   // handing the wall to the brand glow.
   const spillIn = shadeAt + 0.15
   const spillOut = dimAt + 0.25
-  const spillSpan = glowAt + 0.3 - spillIn
+  const spillSpan = spillOut + 0.8 - spillIn
 
   return (
     <motion.div
@@ -292,7 +292,7 @@ export function FlightPorthole({
       animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
       transition={{ delay: T.windowIn, duration: T.windowInDur, ease: EASE }}
     >
-      {/* The airline's colors on the wall, once the check has landed. */}
+      {/* The airline's colors behind the frame, flying with the plane. */}
       <BrandGlow colors={brandColors} at={glowAt} reduced={reduced} />
 
       {/* Daylight spilling onto the cabin wall once the shade is up. */}

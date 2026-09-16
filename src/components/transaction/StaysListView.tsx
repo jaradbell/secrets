@@ -193,11 +193,15 @@ export function StaysListView({
   provider,
   onSelectProvider,
   onClose,
+  onSelectStay,
 }: {
   origin: StaysListOrigin
   provider: StayProviderId
   onSelectProvider: (id: StayProviderId) => void
   onClose: () => void
+  /** 8D: rows become doorways — tapping a listing drills into that stay
+      (the row element carries the morph's origin geometry). */
+  onSelectStay?: (stay: Stay, el: Element) => void
 }) {
   // While the map surface is up the orb stays live, but its resting
   // "Hold or tap to speak" hint stands down — the map is the moment.
@@ -454,7 +458,18 @@ export function StaysListView({
             >
               {rows.map((s, i) => (
                 <motion.div layout="position" key={s.id} transition={SPRING}>
-                  <StayCard stay={s} flat />
+                  {onSelectStay ? (
+                    <button
+                      type="button"
+                      onClick={(e) => onSelectStay(s, e.currentTarget)}
+                      aria-label={`View ${s.title}`}
+                      className="w-full text-left outline-none transition-colors duration-150 active:bg-black/[0.02]"
+                    >
+                      <StayCard stay={s} flat />
+                    </button>
+                  ) : (
+                    <StayCard stay={s} flat />
+                  )}
                   {i < rows.length - 1 && <div className="h-px w-full bg-black/5" />}
                 </motion.div>
               ))}

@@ -33,6 +33,21 @@ export type ReservationStage = 'none' | 'followUp' | 'booking' | 'receipt'
     that render the exchange as a thread show these as user bubbles. */
 export type ReservationUtterance = { id: number; text: string }
 
+/** A surface's primary action, docked beside the orb: while registered the
+    dock splits — the CTA takes the left, the orb slides right (8D's stay
+    details docks "Reserve now" this way). */
+export type DockCta = {
+  label: string
+  /** Quiet second line under the label (price · dates). */
+  sub?: string
+  /** The pill's fill — the merchant's brand color. */
+  color: string
+  /** The merchant's mark, riding a white disc at the pill's left. */
+  icon?: ReactNode
+  disabled?: boolean
+  onTap: () => void
+}
+
 type ReservationFlow = {
   stage: ReservationStage
   slots: ReservationSlots
@@ -52,6 +67,9 @@ type ReservationFlow = {
       "Hold or tap to speak" hint dropped — the orb itself stays live. */
   hintSuppressed: boolean
   setHintSuppressed: (v: boolean) => void
+  /** The docked CTA riding beside the orb (null: the orb sits centered). */
+  dockCta: DockCta | null
+  setDockCta: (cta: DockCta | null) => void
   /** Open the flow with whatever context arrived with the intent. */
   begin: (slots?: ReservationSlots, place?: string) => void
   /** Merge slot values (from popovers or parsed speech). */
@@ -145,6 +163,7 @@ export function ReservationProvider({
   const [beginCount, setBeginCount] = useState(0)
   const [focusedPlace, setFocusedPlace] = useState<string | null>(null)
   const [hintSuppressed, setHintSuppressed] = useState(false)
+  const [dockCta, setDockCta] = useState<DockCta | null>(null)
   const timersRef = useRef<number[]>([])
   const utteranceIdRef = useRef(0)
 
@@ -204,6 +223,8 @@ export function ReservationProvider({
         setFocusedPlace,
         hintSuppressed,
         setHintSuppressed,
+        dockCta,
+        setDockCta,
         begin,
         fillSlots,
         fillFromUtterance,

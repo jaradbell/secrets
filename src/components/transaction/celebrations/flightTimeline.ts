@@ -11,10 +11,13 @@
  *   0.95  porthole frame develops (blur → sharp), shade still drawn
  *   1.30  shade lifts, bottom first — sky, clouds, daylight on the cabin wall
  *   1.60  the route appears on the glass, following the frame: dots, track, codes
- *   2.00  departure — the plane flies the arc, brightening the line behind it
- *   3.26  arrival — the plane settles into the destination dot; the window dims
- *   3.50  the check draws across the glass
- *   3.80  "Flight booked" and the receipt rows develop beneath
+ *   2.00  departure — the plane flies the arc, brightening the line behind it,
+ *         and the brand glow appears behind the frame, its bright lobe riding
+ *         around the frame with the plane (BrandGlow shares the flight's easing)
+ *   3.26  arrival — everything resolves at once: the plane settles into the
+ *         destination dot, the glow blooms out to the full rim, the window dims
+ *   3.30  the check draws across the glass, right off the landing
+ *   3.60  "Flight booked" and the receipt rows develop beneath
  */
 export const FLIGHT_T = {
   surfaceDelay: 0.65,
@@ -26,8 +29,8 @@ export const FLIGHT_T = {
   routeIn: 1.6,
   depart: 2.0,
   flightDur: 1.4,
-  checkIn: 3.5,
-  textIn: 3.8,
+  checkIn: 3.3,
+  textIn: 3.6,
 } as const
 
 /** Fraction of the flight at which the plane has settled onto the destination. */
@@ -36,3 +39,9 @@ export const LAND_FRAC = 0.9
 export const FLIGHT_LAND = FLIGHT_T.depart + FLIGHT_T.flightDur * LAND_FRAC
 
 export const CELEBRATION_EASE = [0.32, 0.72, 0, 1] as const
+/**
+ * The flight's easing — off the origin briskly, settle onto the
+ * destination. Shared by the plane, the flown line (FlightRoute) and the
+ * glow's traveling lobe (BrandGlow), so they move as one thing.
+ */
+export const FLIGHT_EASE = [0.5, 0.05, 0.2, 1] as const

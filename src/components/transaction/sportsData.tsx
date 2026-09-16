@@ -46,48 +46,192 @@ export const EAST_STANDINGS: TeamStanding[] = [
   { rank: 10, name: 'Bulls', logo: '/sports/teams/chi.png', w: 36, l: 46, pct: '.439', gb: '25.0', l10: '3-7', strk: 'l4' },
 ]
 
+/* ── The club registry ─────────────────────────────────────────────────── */
+
+export type TeamLeader = { stat: 'PTS' | 'REB' | 'AST'; name: string; value: string }
+
+/** Prototype-grade club facts the standings and schedule rows don't carry
+    — identity (abbreviation, city, palette), home floor, and the season's
+    leaders. Keyed by the short name every sports row already uses. */
+export type TeamInfo = {
+  abbr: string
+  city: string
+  /** Primary, secondary (what the heroes and celebration walls flood). */
+  colors: [string, string]
+  arena: string
+  arenaCity: string
+  leaders: TeamLeader[]
+}
+
+const leaders = (pts: [string, string], reb: [string, string], ast: [string, string]): TeamLeader[] => [
+  { stat: 'PTS', name: pts[0], value: pts[1] },
+  { stat: 'REB', name: reb[0], value: reb[1] },
+  { stat: 'AST', name: ast[0], value: ast[1] },
+]
+
+export const TEAMS: Record<string, TeamInfo> = {
+  Spurs: { abbr: 'SA', city: 'San Antonio', colors: ['#C4CED4', '#1a1a1a'], arena: 'Frost Bank Center', arenaCity: 'San Antonio, TX', leaders: leaders(['V. Wembanyama', '24.8'], ['V. Wembanyama', '11.2'], ["De'A. Fox", '7.1']) },
+  Thunder: { abbr: 'OKC', city: 'Oklahoma City', colors: ['#007AC1', '#EF3B24'], arena: 'Paycom Center', arenaCity: 'Oklahoma City, OK', leaders: leaders(['S. Gilgeous-Alexander', '31.4'], ['C. Holmgren', '8.9'], ['S. Gilgeous-Alexander', '6.3']) },
+  Nuggets: { abbr: 'DEN', city: 'Denver', colors: ['#0E2240', '#FEC524'], arena: 'Ball Arena', arenaCity: 'Denver, CO', leaders: leaders(['N. Jokić', '28.1'], ['N. Jokić', '12.6'], ['N. Jokić', '10.2']) },
+  Wolves: { abbr: 'MIN', city: 'Minnesota', colors: ['#0C2340', '#78BE20'], arena: 'Target Center', arenaCity: 'Minneapolis, MN', leaders: leaders(['A. Edwards', '27.3'], ['R. Gobert', '11.4'], ['A. Edwards', '4.9']) },
+  Mavericks: { abbr: 'DAL', city: 'Dallas', colors: ['#00538C', '#002B5E'], arena: 'American Airlines Center', arenaCity: 'Dallas, TX', leaders: leaders(['A. Davis', '25.2'], ['A. Davis', '11.8'], ['C. Flagg', '4.6']) },
+  Lakers: { abbr: 'LAL', city: 'Los Angeles', colors: ['#552583', '#FDB927'], arena: 'Crypto.com Arena', arenaCity: 'Los Angeles, CA', leaders: leaders(['L. Dončić', '30.6'], ['L. James', '7.9'], ['L. Dončić', '8.4']) },
+  Clippers: { abbr: 'LAC', city: 'Los Angeles', colors: ['#C8102E', '#1D428A'], arena: 'Intuit Dome', arenaCity: 'Inglewood, CA', leaders: leaders(['K. Leonard', '24.1'], ['I. Zubac', '12.3'], ['J. Harden', '8.7']) },
+  Suns: { abbr: 'PHX', city: 'Phoenix', colors: ['#1D1160', '#E56020'], arena: 'Mortgage Matchup Center', arenaCity: 'Phoenix, AZ', leaders: leaders(['D. Booker', '26.8'], ['M. Williams', '8.2'], ['D. Booker', '6.6']) },
+  Grizzlies: { abbr: 'MEM', city: 'Memphis', colors: ['#5D76A9', '#12173F'], arena: 'FedExForum', arenaCity: 'Memphis, TN', leaders: leaders(['J. Morant', '23.9'], ['Z. Edey', '10.7'], ['J. Morant', '7.8']) },
+  Kings: { abbr: 'SAC', city: 'Sacramento', colors: ['#5A2D81', '#63727A'], arena: 'Golden 1 Center', arenaCity: 'Sacramento, CA', leaders: leaders(['Z. LaVine', '22.4'], ['D. Sabonis', '13.1'], ['D. Sabonis', '6.2']) },
+  Celtics: { abbr: 'BOS', city: 'Boston', colors: ['#007A33', '#BA9653'], arena: 'TD Garden', arenaCity: 'Boston, MA', leaders: leaders(['J. Brown', '26.4'], ['D. White', '5.8'], ['P. Pritchard', '5.9']) },
+  Cavaliers: { abbr: 'CLE', city: 'Cleveland', colors: ['#860038', '#FDBB30'], arena: 'Rocket Arena', arenaCity: 'Cleveland, OH', leaders: leaders(['D. Mitchell', '25.7'], ['E. Mobley', '9.6'], ['D. Garland', '6.9']) },
+  Knicks: { abbr: 'NY', city: 'New York', colors: ['#006BB6', '#F58426'], arena: 'Madison Square Garden', arenaCity: 'New York, NY', leaders: leaders(['J. Brunson', '27.2'], ['K. Towns', '12.4'], ['J. Brunson', '7.3']) },
+  Bucks: { abbr: 'MIL', city: 'Milwaukee', colors: ['#00471B', '#EEE1C6'], arena: 'Fiserv Forum', arenaCity: 'Milwaukee, WI', leaders: leaders(['G. Antetokounmpo', '30.8'], ['G. Antetokounmpo', '12.1'], ['G. Antetokounmpo', '6.4']) },
+  Pacers: { abbr: 'IND', city: 'Indiana', colors: ['#002D62', '#FDBB30'], arena: 'Gainbridge Fieldhouse', arenaCity: 'Indianapolis, IN', leaders: leaders(['P. Siakam', '22.6'], ['P. Siakam', '7.4'], ['A. Nembhard', '6.8']) },
+  Magic: { abbr: 'ORL', city: 'Orlando', colors: ['#0077C0', '#C4CED4'], arena: 'Kia Center', arenaCity: 'Orlando, FL', leaders: leaders(['P. Banchero', '25.1'], ['P. Banchero', '8.3'], ['F. Wagner', '5.2']) },
+  Pistons: { abbr: 'DET', city: 'Detroit', colors: ['#C8102E', '#1D42BA'], arena: 'Little Caesars Arena', arenaCity: 'Detroit, MI', leaders: leaders(['C. Cunningham', '26.3'], ['J. Duren', '10.8'], ['C. Cunningham', '9.1']) },
+  Heat: { abbr: 'MIA', city: 'Miami', colors: ['#98002E', '#F9A01B'], arena: 'Kaseya Center', arenaCity: 'Miami, FL', leaders: leaders(['T. Herro', '24.2'], ['B. Adebayo', '9.7'], ['T. Herro', '5.6']) },
+  Hawks: { abbr: 'ATL', city: 'Atlanta', colors: ['#E03A3E', '#C1D32F'], arena: 'State Farm Arena', arenaCity: 'Atlanta, GA', leaders: leaders(['T. Young', '23.8'], ['J. Johnson', '9.9'], ['T. Young', '11.2']) },
+  Bulls: { abbr: 'CHI', city: 'Chicago', colors: ['#CE1141', '#1a1a1a'], arena: 'United Center', arenaCity: 'Chicago, IL', leaders: leaders(['C. White', '21.9'], ['M. Buzelis', '7.1'], ['J. Giddey', '8.4']) },
+}
+
+const FALLBACK_TEAM: TeamInfo = {
+  abbr: '—',
+  city: '',
+  colors: ['#8a8494', '#3a3742'],
+  arena: 'Arena',
+  arenaCity: '',
+  leaders: [],
+}
+
+export const teamInfo = (name: string): TeamInfo => TEAMS[name] ?? FALLBACK_TEAM
+
+/** Which conference a standings row belongs to. */
+export const conferenceOf = (name: string): 'West' | 'East' =>
+  EAST_STANDINGS.some((t) => t.name === name) ? 'East' : 'West'
+
+/* ── The slate ─────────────────────────────────────────────────────────── */
+
 export type ScheduleTeam = { name: string; record: string; logo: string }
 
 export type ScheduleGame = {
   id: string
+  /** Home club first — the fixture is played on the first club's floor. */
   teams: [ScheduleTeam, ScheduleTeam]
   /** Relative day label in the right column ("Tomorrow", "Wednesday"). */
   day: string
   time: string
+  /** National broadcast — the preview's TV chip. */
+  tv: string
 }
 
 export type ScheduleGroup = { date: string; games: ScheduleGame[] }
 
-const SPURS: ScheduleTeam = { name: 'Spurs', record: '(2-3)', logo: '/sports/spurs.svg' }
-const THUNDER: ScheduleTeam = { name: 'Thunder', record: '(3-2)', logo: '/sports/thunder.svg' }
-const CELTICS: ScheduleTeam = { name: 'Celtics', record: '(3-2)', logo: '/sports/teams/bos.png' }
-const PACERS: ScheduleTeam = { name: 'Pacers', record: '(2-3)', logo: '/sports/teams/ind.png' }
+/** Records here are the series — both conference finals sit at 2–2. */
+const SPURS: ScheduleTeam = { name: 'Spurs', record: '(2-2)', logo: '/sports/spurs.svg' }
+const THUNDER: ScheduleTeam = { name: 'Thunder', record: '(2-2)', logo: '/sports/thunder.svg' }
+const CELTICS: ScheduleTeam = { name: 'Celtics', record: '(2-2)', logo: '/sports/teams/bos.png' }
+const PACERS: ScheduleTeam = { name: 'Pacers', record: '(2-2)', logo: '/sports/teams/ind.png' }
 
-/** The upcoming slate, grouped by date — conference finals winding toward
-    a pair of game sevens. */
+/** The upcoming slate, grouped by date — both conference finals tied 2–2,
+    Game 5 on the higher seed's floor (2-2-1-1-1), winding toward a pair
+    of game sevens. */
 export const SCHEDULE: ScheduleGroup[] = [
   {
     date: 'Sat., June 14th',
     games: [
-      { id: 'g5-west', teams: [SPURS, THUNDER], day: 'Tomorrow', time: '7:30 PM' },
-      { id: 'g5-east', teams: [PACERS, CELTICS], day: 'Tomorrow', time: '5:00 PM' },
+      { id: 'g5-west', teams: [SPURS, THUNDER], day: 'Tomorrow', time: '7:30 PM', tv: 'ESPN' },
+      { id: 'g5-east', teams: [CELTICS, PACERS], day: 'Tomorrow', time: '5:00 PM', tv: 'ABC' },
     ],
   },
   {
     date: 'Mon., June 16th',
     games: [
-      { id: 'g6-west', teams: [THUNDER, SPURS], day: 'Monday', time: '8:00 PM' },
-      { id: 'g6-east', teams: [CELTICS, PACERS], day: 'Monday', time: '6:30 PM' },
+      { id: 'g6-west', teams: [THUNDER, SPURS], day: 'Monday', time: '8:00 PM', tv: 'ESPN' },
+      { id: 'g6-east', teams: [PACERS, CELTICS], day: 'Monday', time: '6:30 PM', tv: 'ABC' },
     ],
   },
   {
     date: 'Wed., June 18th',
     games: [
-      { id: 'g7-west', teams: [SPURS, THUNDER], day: 'Wednesday', time: '7:30 PM' },
-      { id: 'g7-east', teams: [PACERS, CELTICS], day: 'Wednesday', time: '5:00 PM' },
+      { id: 'g7-west', teams: [SPURS, THUNDER], day: 'Wednesday', time: '7:30 PM', tv: 'ESPN' },
+      { id: 'g7-east', teams: [CELTICS, PACERS], day: 'Wednesday', time: '5:00 PM', tv: 'ABC' },
     ],
   },
 ]
+
+export const ALL_GAMES: ScheduleGame[] = SCHEDULE.flatMap((g) => g.games)
+
+/** The date group a fixture belongs to ("Sat., June 14th"). */
+export const gameDate = (game: ScheduleGame) =>
+  SCHEDULE.find((g) => g.games.some((x) => x.id === game.id))?.date ?? ''
+
+/** "g5-west" → 5. */
+export const gameNumberOf = (id: string) => parseInt(id.match(/\d+/)?.[0] ?? '0', 10)
+
+/** "g5-west" → "west". */
+export const seriesKeyOf = (id: string): SeriesKey => (id.endsWith('east') ? 'east' : 'west')
+
+/* ── The series ────────────────────────────────────────────────────────── */
+
+export type SeriesKey = 'west' | 'east'
+
+export type SeriesGame = {
+  num: number
+  /** Home club first, mirroring ScheduleGame. */
+  home: string
+  away: string
+  homeScore: number
+  awayScore: number
+  date: string
+}
+
+export type Series = {
+  title: string
+  /** The two clubs, higher seed first. */
+  teams: [string, string]
+  played: SeriesGame[]
+}
+
+/** Both conference finals so far — four games each, split 2–2. The
+    preview's series strip and "last meeting" read from here. */
+export const SERIES: Record<SeriesKey, Series> = {
+  west: {
+    title: 'Western Conference Finals',
+    teams: ['Spurs', 'Thunder'],
+    played: [
+      { num: 1, home: 'Spurs', away: 'Thunder', homeScore: 112, awayScore: 104, date: 'Wed, June 4' },
+      { num: 2, home: 'Spurs', away: 'Thunder', homeScore: 109, awayScore: 118, date: 'Fri, June 6' },
+      { num: 3, home: 'Thunder', away: 'Spurs', homeScore: 121, awayScore: 110, date: 'Mon, June 9' },
+      { num: 4, home: 'Thunder', away: 'Spurs', homeScore: 108, awayScore: 115, date: 'Wed, June 11' },
+    ],
+  },
+  east: {
+    title: 'Eastern Conference Finals',
+    teams: ['Celtics', 'Pacers'],
+    played: [
+      { num: 1, home: 'Celtics', away: 'Pacers', homeScore: 110, awayScore: 98, date: 'Tue, June 3' },
+      { num: 2, home: 'Celtics', away: 'Pacers', homeScore: 111, awayScore: 114, date: 'Thu, June 5' },
+      { num: 3, home: 'Pacers', away: 'Celtics', homeScore: 99, awayScore: 105, date: 'Sat, June 7' },
+      { num: 4, home: 'Pacers', away: 'Celtics', homeScore: 120, awayScore: 113, date: 'Tue, June 10' },
+    ],
+  },
+}
+
+export const seriesWinner = (g: SeriesGame) => (g.homeScore > g.awayScore ? g.home : g.away)
+
+/** A club's wins in a series, with an optional extra result folded in. */
+export const seriesWins = (key: SeriesKey, team: string, extraWinner?: string) =>
+  SERIES[key].played.filter((g) => seriesWinner(g) === team).length +
+  (extraWinner === team ? 1 : 0)
+
+/** "Series tied 2–2" / "Spurs lead 3–2" for a series' played games, with
+    an optional extra result folded in (the game center's final). */
+export const seriesLine = (key: SeriesKey, extraWinner?: string) => {
+  const [a, b] = SERIES[key].teams
+  const wa = seriesWins(key, a, extraWinner)
+  const wb = seriesWins(key, b, extraWinner)
+  if (wa === wb) return `Series tied ${wa}\u2013${wb}`
+  const [leader, hi, lo] = wa > wb ? [a, wa, wb] : [b, wb, wa]
+  return `${leader} ${hi === 4 ? 'win' : 'lead'} ${hi}\u2013${lo}`
+}
 
 /** League attribution chips — ProviderChips' grammar with sports sources.
     ESPN's mark is its wordmark knocked out white on the brand's red disc;

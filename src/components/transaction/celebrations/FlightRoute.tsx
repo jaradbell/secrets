@@ -22,7 +22,13 @@ import {
   useTransform,
 } from 'framer-motion'
 import { useEffect, useRef, type ReactNode } from 'react'
-import { CELEBRATION_EASE as EASE, FLIGHT_LAND, FLIGHT_T as T, LAND_FRAC } from './flightTimeline'
+import {
+  CELEBRATION_EASE as EASE,
+  FLIGHT_EASE,
+  FLIGHT_LAND,
+  FLIGHT_T as T,
+  LAND_FRAC,
+} from './flightTimeline'
 import { GLASS_H, GLASS_RX, GLASS_RY, GLASS_W } from './portholeGeometry'
 
 const WHITE = '#fff'
@@ -49,8 +55,6 @@ const CODE_DX = 6
 const CODE_DY = 26
 const DOT_R = 3.4
 
-/** Off the origin briskly, settle onto the destination. */
-const FLIGHT_EASE = [0.5, 0.05, 0.2, 1] as const
 /**
  * Fractions of the flight: the plane starts descending into the pin
  * (fading, shrinking) at DESCEND, is gone by LAND, when the pin lands.

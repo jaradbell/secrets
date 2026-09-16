@@ -10,8 +10,11 @@ import { ReceiptGalleryExpressive } from '../components/transaction/ReceiptGalle
 import { ReceiptGalleryTicket } from '../components/transaction/ReceiptGalleryTicket'
 import { ReceiptGalleryWallet } from '../components/transaction/ReceiptGalleryWallet'
 import { FlightBookingReceipt } from '../components/transaction/FlightBookingReceipt'
+import { PlaceBookingReceipt } from '../components/transaction/PlaceBookingReceipt'
 import { FlightBookingView } from '../components/transaction/FlightBookingView'
 import { FlightsView } from '../components/transaction/FlightsView'
+import { GameTicketReceipt } from '../components/transaction/GameTicketReceipt'
+import { StayBookingReceipt } from '../components/transaction/StayBookingReceipt'
 import { MatchStyleProvider } from '../components/transaction/MatchRing'
 import { ReservationProvider } from '../components/transaction/reservationFlow'
 import { SportsView } from '../components/transaction/SportsView'
@@ -511,6 +514,9 @@ const PROTOTYPES: {
   {
     // Places: the current restaurant treatment for the same two surfaces —
     // the thread's frosted card stack and the Compare map + list sheet.
+    // Booking runs 2E's grammar end to end: checkout confirms into the
+    // full-screen receipt, whose celebration is branded by the provider
+    // that sourced the place (the brand ball morph).
     id: 'list-results-8b',
     tag: '8B',
     label: 'Places',
@@ -520,7 +526,7 @@ const PROTOTYPES: {
         <ReservationProvider>
           <VoiceControl
             followUp="none"
-            receipt={null}
+            receipt={PlaceBookingReceipt}
             idleContent={<TransactionView variant="2d" />}
           />
         </ReservationProvider>
@@ -528,31 +534,44 @@ const PROTOTYPES: {
     ),
   },
   {
-    // Sports: one thread, three inquiries — the object changes with the
-    // question. Schedule → fixture card (2279:78979), live game →
-    // scoreboard (2377:73529), rankings → standings rows (2371:73391)
-    // dealt as a swipeable deck ranked 1–10.
+    // Sports: one thread, five inquiries — the object changes with the
+    // question, and each drills into the detail its intent implies.
+    // Schedule → fixture card (2279:78979) → game preview (tickets as a
+    // punch-out); tickets → seat-listing deck (Ticketmaster / SeatGeek) →
+    // the seat-and-pay sheet, whose purchase blooms the ticket celebration;
+    // live game → scoreboard (2377:73529) → game center; final → the same
+    // card gone Final → the recap state; rankings → standings rows
+    // (2371:73391) dealt as a deck → the team page.
     id: 'list-results-8c',
     tag: '8C',
     label: 'Sports',
     ambient: 'composer',
     render: () => (
       <ReservationProvider>
-        <VoiceControl followUp="none" receipt={null} idleContent={<SportsView />} />
+        <VoiceControl
+          followUp="none"
+          receipt={GameTicketReceipt}
+          idleContent={<SportsView />}
+        />
       </ReservationProvider>
     ),
   },
   {
     // Stays: the Figma stay card (node 2377:73083) as the object class —
     // marketplace chips (Airbnb, Vrbo, Expedia) source the deck, View More
-    // morphs the full rental / hotel list open.
+    // morphs the full rental / hotel list open. Cards drill into the stay
+    // details view; Reserve blooms the front-door celebration.
     id: 'list-results-8d',
     tag: '8D',
     label: 'Stays',
     ambient: 'composer',
     render: () => (
       <ReservationProvider>
-        <VoiceControl followUp="none" receipt={null} idleContent={<StaysView />} />
+        <VoiceControl
+          followUp="none"
+          receipt={StayBookingReceipt}
+          idleContent={<StaysView />}
+        />
       </ReservationProvider>
     ),
   },

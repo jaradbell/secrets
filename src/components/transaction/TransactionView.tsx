@@ -20,6 +20,7 @@ import { ConversationHeader } from './ConversationHeader'
 import { PROVIDERS, PROVIDER_RESULTS, type ProviderId, type RankedResult } from './data'
 import { CancelledDraftArtifact, DraftReservationCard } from './DraftReservationCard'
 import { PlaceCardStack } from './PlaceCardStack'
+import { placeBooking } from './placeBookingStore'
 import { PlaceDetailsView, type MorphOrigin } from './PlaceDetailsView'
 import { DiningTicket } from './ReceiptGalleryTicket'
 import {
@@ -464,6 +465,10 @@ export function TransactionView({
   // its own row elements directly.
   const openDetailsFrom = (result: RankedResult, card: Element, thumb: Element) => {
     if (!screenEl) return
+    // 8B's receipt takeover brands its celebration by whoever sourced the
+    // place — stamp the booking handoff as the details view opens.
+    placeBooking.provider = PROVIDERS.find((p) => p.id === provider) ?? null
+    placeBooking.result = result
     const v = screenEl.getBoundingClientRect()
     const c = card.getBoundingClientRect()
     const t = thumb.getBoundingClientRect()

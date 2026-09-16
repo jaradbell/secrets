@@ -110,8 +110,40 @@ function ScheduleRow({ game }: { game: ScheduleGame }) {
   )
 }
 
-/** One conference table — title, stat header, hairline, ranked rows. */
-function StandingsSection({ title, teams }: { title: string; teams: TeamStanding[] }) {
+/** One ranked row — the standings card's anatomy in the table. */
+function StandingsRow({ team }: { team: TeamStanding }) {
+  return (
+    <div className="flex h-[45px] items-center justify-between py-[5px]">
+      <div className="flex min-w-0 items-center gap-[6.5px]">
+        <span className="w-[9px] shrink-0 text-[12px] font-medium text-[#787a7d]">{team.rank}</span>
+        <img src={team.logo} alt="" draggable={false} className="size-6 shrink-0 object-contain" />
+        <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-[#1e1e1f]">
+          {team.name}
+        </p>
+      </div>
+      <div className="flex w-[186px] shrink-0 items-center justify-between text-[12px] leading-none font-medium whitespace-nowrap text-black/60">
+        <span>{team.w}</span>
+        <span>{team.l}</span>
+        <span>{team.pct}</span>
+        <span>{team.gb}</span>
+        <span>{team.l10}</span>
+        <span>{team.strk}</span>
+      </div>
+    </div>
+  )
+}
+
+/** One conference table — title, stat header, hairline, ranked rows.
+    Rows are doorways into the team page when the host wires them. */
+function StandingsSection({
+  title,
+  teams,
+  onSelectTeam,
+}: {
+  title: string
+  teams: TeamStanding[]
+  onSelectTeam?: (team: TeamStanding, el: Element) => void
+}) {
   return (
     <div className="flex flex-col">
       <p className="text-[14px] leading-[18px] font-medium text-[#0a0a0a]">{title}</p>
@@ -128,32 +160,21 @@ function StandingsSection({ title, teams }: { title: string; teams: TeamStanding
       </div>
       <div className="mt-2.5 h-px w-full bg-black/[0.06]" />
       <div className="mt-1 flex flex-col">
-        {teams.map((team) => (
-          <div key={team.name} className="flex h-[45px] items-center justify-between py-[5px]">
-            <div className="flex min-w-0 items-center gap-[6.5px]">
-              <span className="w-[9px] shrink-0 text-[12px] font-medium text-[#787a7d]">
-                {team.rank}
-              </span>
-              <img
-                src={team.logo}
-                alt=""
-                draggable={false}
-                className="size-6 shrink-0 object-contain"
-              />
-              <p className="truncate text-[14px] font-semibold tracking-[-0.01em] text-[#1e1e1f]">
-                {team.name}
-              </p>
-            </div>
-            <div className="flex w-[186px] shrink-0 items-center justify-between text-[12px] leading-none font-medium whitespace-nowrap text-black/60">
-              <span>{team.w}</span>
-              <span>{team.l}</span>
-              <span>{team.pct}</span>
-              <span>{team.gb}</span>
-              <span>{team.l10}</span>
-              <span>{team.strk}</span>
-            </div>
-          </div>
-        ))}
+        {teams.map((team) =>
+          onSelectTeam ? (
+            <button
+              key={team.name}
+              type="button"
+              onClick={(e) => onSelectTeam(team, e.currentTarget)}
+              aria-label={`View ${team.name}`}
+              className="-mx-2 w-[calc(100%+16px)] rounded-[12px] px-2 text-left outline-none transition-colors duration-150 active:bg-black/[0.03]"
+            >
+              <StandingsRow team={team} />
+            </button>
+          ) : (
+            <StandingsRow key={team.name} team={team} />
+          ),
+        )}
       </div>
     </div>
   )
@@ -165,12 +186,20 @@ export function SportsListView({
   provider,
   onSelectProvider,
   onClose,
+  onSelectGame,
+  onSelectTeam,
 }: {
   mode: SportsListMode
   origin: SportsListOrigin
   provider: SportsProviderId
   onSelectProvider: (id: SportsProviderId) => void
   onClose: () => void
+  /** 8C: schedule rows become doorways — tapping a fixture drills into
+      that game's preview (the row element carries the morph's origin). */
+  onSelectGame?: (game: ScheduleGame, el: Element) => void
+  /** 8C: standings rows become doorways — tapping a team drills into its
+      page. */
+  onSelectTeam?: (team: TeamStanding, el: Element) => void
 }) {
   // While the list is up the orb stays live, but its resting hint stands
   // down — the results are the moment.
@@ -261,9 +290,21 @@ export function SportsListView({
                   <p className="pt-3 pb-1 text-[13px] font-medium text-ink-tertiary">
                     {group.date}
                   </p>
-                  {group.games.map((game) => (
-                    <ScheduleRow key={game.id} game={game} />
-                  ))}
+                  {group.games.map((game) =>
+                    onSelectGame ? (
+                      <button
+                        key={game.id}
+                        type="button"
+                        onClick={(e) => onSelectGame(game, e.currentTarget)}
+                        aria-label={`View ${game.teams[0].name} vs ${game.teams[1].name}`}
+                        className="-mx-2 w-[calc(100%+16px)] rounded-[14px] px-2 text-left outline-none transition-colors duration-150 active:bg-black/[0.03]"
+                      >
+                        <ScheduleRow game={game} />
+                      </button>
+                    ) : (
+                      <ScheduleRow key={game.id} game={game} />
+                    ),
+                  )}
                 </motion.div>
               ))}
             </div>
@@ -279,7 +320,11 @@ export function SportsListView({
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.35, delay: 0.08 + si * 0.08, ease: EASE }}
                 >
-                  <StandingsSection title={section.title} teams={section.teams} />
+                  <StandingsSection
+                    title={section.title}
+                    teams={section.teams}
+                    onSelectTeam={onSelectTeam}
+                  />
                 </motion.div>
               ))}
             </div>

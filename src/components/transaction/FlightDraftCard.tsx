@@ -109,9 +109,11 @@ function WalletCardChip({ brand = 'Visa' }: { brand?: string }) {
 /**
  * The Apple Pay moment — sheet with the card on file, contact, and total,
  * confirmed with a simulated Face ID pass (scan → done → the payment
- * hands off). X backs out with nothing charged.
+ * hands off). X backs out with nothing charged. Exported: the stays and
+ * sports details views (8D / 8C) borrow this exact sheet as their one-tap
+ * lane, so paying reads the same across every domain.
  */
-function ApplePaySheet({
+export function ApplePaySheet({
   total,
   merchant,
   onConfirm,
