@@ -116,6 +116,11 @@ export function FlightBookingReceipt({
               {flightBooking.savedToWallet && (
                 <span className="text-[11px] text-white/35">Saved to your wallet</span>
               )}
+              {flightBooking.savedAsDefault && (
+                <span className="text-[11px] text-white/35">
+                  Saved as your default payment method
+                </span>
+              )}
             </span>
             <span className="text-[13px] font-semibold text-white/85">${total}</span>
           </div>

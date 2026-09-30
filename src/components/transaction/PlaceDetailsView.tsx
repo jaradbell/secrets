@@ -140,6 +140,31 @@ function GetReservationChip({ place }: { place: string }) {
   )
 }
 
+/** 2F's flow shape pointed at places: the ask already carried the full
+    context (Saturday, dinner for 2), so nothing is missing and there's no
+    reason to stop — this chip IS the whole transaction. One tap books the
+    table and the confirmation blooms straight in; no checkout sheet, no
+    follow-up. (Reservations are free — no payment rides this tap.) */
+function InstantReservationChip({ place }: { place: string }) {
+  const flow = useReservationFlow()
+
+  const book = () => {
+    if (!flow || flow.stage === 'booking' || flow.stage === 'receipt') return
+    // Full context up front — begin() skips straight to booking.
+    flow.begin({ date: 'Saturday, Jul 25', time: '7:30 PM', party: 2 }, place)
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={book}
+      className="flex h-11 shrink-0 items-center rounded-full bg-ink py-2.5 pl-3.5 pr-4 text-[14px] leading-[18px] text-white outline-none transition-transform duration-200 ease-out active:scale-[0.97]"
+    >
+      Get reservation
+    </button>
+  )
+}
+
 const RATING_BARS: { label: string; width: number }[] = [
   { label: '5', width: 134 },
   { label: '4', width: 149 },
@@ -186,10 +211,16 @@ export function PlaceDetailsView({
   result,
   origin,
   onClose,
+  instantBook = false,
 }: {
   result: RankedResult
   origin: MorphOrigin
   onClose: () => void
+  /** 2F's flow shape (8B): the reservation chip completes the whole
+      booking in one tap — the ask carried full context, so there's no
+      checkout speed bump. The caption under the chip row owns up to what
+      the tap commits. No payment — reservations are free. */
+  instantBook?: boolean
 }) {
   const { place, rating, reviews } = result
   const reviewLabel = reviews >= 1000 ? `${Math.round(reviews / 100) / 10}k` : `${reviews}`
@@ -322,7 +353,11 @@ export function PlaceDetailsView({
               >
                 Directions
               </button>
-              <GetReservationChip place={place.name} />
+              {instantBook ? (
+                <InstantReservationChip place={place.name} />
+              ) : (
+                <GetReservationChip place={place.name} />
+              )}
               {CHIP_ACTIONS.map((label) => (
                 <button
                   key={label}
@@ -334,6 +369,14 @@ export function PlaceDetailsView({
               ))}
             </div>
           </div>
+
+          {/* 2F's caption grammar — the tap completes the booking, so the
+              sheet owns up to exactly what it commits, under the chip row. */}
+          {instantBook && (
+            <p className="mt-2 px-5 text-[10.5px] text-ink-tertiary">
+              Books Saturday at 7:30 PM for 2 &middot; free to cancel until 5 PM
+            </p>
+          )}
 
           {/* AI summary */}
           <div className="mx-5 mt-[26px] flex flex-col gap-2.5 rounded-[24px] bg-[#f5f5f5] p-4">

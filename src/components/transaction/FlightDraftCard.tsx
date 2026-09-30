@@ -19,7 +19,8 @@ import { AIRLINE_FLIGHTS, type Airline, type FlightOption } from './flightData'
 import {
   cardBrandOf,
   flightBooking,
-  flightNumber,
+  paymentLabel,
+  wallet,
   type FlightPaymentMethod,
 } from './flightBookingStore'
 import { useReservationFlow } from './reservationFlow'
@@ -415,6 +416,8 @@ export function FlightDraftCard({
   airline,
   onCancelled,
   onOpenDetails,
+  defaultPay,
+  missingPassengers,
 }: {
   flight: FlightOption
   airline: Airline
@@ -424,6 +427,14 @@ export function FlightDraftCard({
   /** Route-spread tap — the host morphs the flight's details view open
       from this element (the summary → details grammar). */
   onOpenDetails?: (el: Element) => void
+  /** The wallet's default payment method is applied up front: the go
+      button pays with the default in one tap, and the lane picker becomes
+      an optional "Change" stop under the CTA (2H's draft leads with it). */
+  defaultPay?: boolean
+  /** 2H — the draft exists BECAUSE a required fact is missing: passengers
+      arrives unset, its ledger row is flagged, and the pay CTA stands down
+      until the gap is answered. */
+  missingPassengers?: boolean
 }) {
   const flow = useReservationFlow()
   const stage = flow?.stage ?? 'none'
@@ -432,7 +443,10 @@ export function FlightDraftCard({
 
   const [face, setFace] = useState<'summary' | 'payment'>('summary')
   const [confirmingCancel, setConfirmingCancel] = useState(false)
-  const [passengers, setPassengers] = useState(1)
+  // 2H arrives with passengers unanswered — null is the flagged gap.
+  const [passengers, setPassengers] = useState<number | null>(missingPassengers ? null : 1)
+  const pax = passengers ?? 1
+  const needsPassengers = passengers === null
   // The draft's own copy of the flight — date / departure / cabin edits
   // fold into it, so what you pay for is exactly what the card says.
   const [draftFlight, setDraftFlight] = useState<FlightOption>(flight)
@@ -452,50 +466,122 @@ export function FlightDraftCard({
   // texted code); the card lane detours through the save-to-wallet ask.
   const [walletSheet, setWalletSheet] = useState<null | 'applepay' | 'link'>(null)
   const [savePrompt, setSavePrompt] = useState(false)
+  // The payment face's "save as default" control — whichever lane completes
+  // becomes the wallet's remembered preference for future checkouts.
+  const [saveAsDefault, setSaveAsDefault] = useState(false)
+  // 2F's applied preference — read once per render; pay() re-reads live.
+  const savedDefault = defaultPay ? wallet.defaultPayment : null
 
-  // Card-form fields — the manual lane next to the one-tap wallets.
+  // Card-entry fields — the manual lane next to the one-tap wallets. The
+  // number field sits in the open (no fold); completing it locks the
+  // number into a brand chip and the expiry / CVC fields replace it in
+  // place (the inline single-row grammar), the pay button growing in with
+  // them. Tapping the chip unlocks the number for editing.
+  const [numberLocked, setNumberLocked] = useState(false)
   const [cardNumber, setCardNumber] = useState('')
   const [expiry, setExpiry] = useState('')
   const [cvc, setCvc] = useState('')
   const cardReady =
     cardNumber.replace(/\D/g, '').length >= 15 && /^\d{2}\/\d{2}$/.test(expiry) && /^\d{3,4}$/.test(cvc)
+  const handleCardNumber = (raw: string) => {
+    const formatted = formatCardNumber(raw)
+    setCardNumber(formatted)
+    const digits = formatted.replace(/\D/g, '')
+    if (digits.length >= (cardBrandOf(formatted) === 'Amex' ? 15 : 16)) setNumberLocked(true)
+  }
 
   const [viewport, setViewport] = useState<HTMLElement | null>(null)
   useEffect(() => {
     setViewport(document.getElementById('app-viewport'))
   }, [])
 
+  // Keep the payment face clear of the dock — flipping to payment (or
+  // unrolling the card form) grows the card in place, below the thread's
+  // own append-scroll. Once the growth settles, nudge the scroller until
+  // the face's tail is back above the dock's reserved band.
+  const paymentFaceRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (face !== 'payment') return
+    const timer = window.setTimeout(() => {
+      const node = paymentFaceRef.current
+      if (!node) return
+      let scroller = node.parentElement
+      while (scroller && scroller.scrollHeight <= scroller.clientHeight + 1)
+        scroller = scroller.parentElement
+      if (!scroller) return
+      // The thread scroller runs under the dock and reserves 190px for it
+      // (its -mb / pb pair) — the face's tail belongs above that band.
+      const dockBand = 190
+      const overflow =
+        node.getBoundingClientRect().bottom -
+        (scroller.getBoundingClientRect().bottom - dockBand)
+      if (overflow > 0) scroller.scrollBy({ top: overflow + 14, behavior: 'smooth' })
+    }, 420)
+    return () => window.clearTimeout(timer)
+  }, [face, numberLocked])
+
   const brand = airline.brandColor
   // Per-seat fare: the flight's price re-based onto the chosen cabin tier.
   const unit = draftFlight.price - tierDelta(airline.id, draftFlight.cabin) + tierDelta(airline.id, cabin)
-  const total = unit * passengers
+  const total = unit * pax
   /** The flight as edited — what actually gets booked and kept. */
   const bookedFlight = (): FlightOption => ({ ...draftFlight, cabin, price: unit })
 
   /** Any lane lands here: snapshot the booking for the receipt surfaces,
-      then hand the flow a complete intent — it books, then blooms. */
-  const pay = (method: FlightPaymentMethod, opts?: { saveToWallet?: boolean }) => {
-    if (!flow || processing) return
+      then hand the flow a complete intent — it books, then blooms.
+      `viaDefault` pays with the wallet's saved card instead of the form. */
+  const pay = (
+    method: FlightPaymentMethod,
+    opts?: { saveToWallet?: boolean; viaDefault?: boolean },
+  ) => {
+    if (!flow || processing || needsPassengers) return
     closeSheet()
     setWalletSheet(null)
     setSavePrompt(false)
     flightBooking.flight = bookedFlight()
     flightBooking.airline = airline
-    flightBooking.passengers = passengers
+    flightBooking.passengers = pax
     flightBooking.method = method
-    flightBooking.cardBrand = method === 'card' ? cardBrandOf(cardNumber) : undefined
+    flightBooking.cardBrand =
+      method === 'card'
+        ? opts?.viaDefault
+          ? (wallet.defaultPayment?.cardBrand ?? 'Visa')
+          : cardBrandOf(cardNumber)
+        : undefined
     flightBooking.cardLast4 =
-      method === 'card' ? cardNumber.replace(/\D/g, '').slice(-4) : undefined
+      method === 'card'
+        ? opts?.viaDefault
+          ? (wallet.defaultPayment?.cardLast4 ?? '4242')
+          : cardNumber.replace(/\D/g, '').slice(-4)
+        : undefined
     flightBooking.savedToWallet = method === 'card' ? !!opts?.saveToWallet : undefined
+    // The control's promise, kept at the moment money moves: whichever
+    // lane carried this payment is now the wallet's default.
+    flightBooking.savedAsDefault = saveAsDefault || undefined
+    if (saveAsDefault)
+      wallet.defaultPayment = {
+        method,
+        cardBrand: flightBooking.cardBrand,
+        cardLast4: flightBooking.cardLast4,
+      }
     flightBooking.total = total
     flow.begin(
-      { date: draftFlight.date, time: draftFlight.departs, party: passengers },
+      { date: draftFlight.date, time: draftFlight.departs, party: pax },
       draftFlight.id,
     )
   }
 
-  // Every fact is editable — each row opens its own picker sheet.
-  const ledger: { id: FieldSheet; label: string; value: string }[] = [
+  /** 2H — payment can't fire while the required fact is missing. Any pay
+      affordance bounces back to the summary with the passengers sheet up. */
+  const askPassengers = () => {
+    setFace('summary')
+    setWalletSheet(null)
+    setSheet('passengers')
+  }
+
+  // Every fact is editable — each row opens its own picker sheet. A
+  // missing fact (2H's unanswered passengers) rides flagged, not blank.
+  const ledger: { id: FieldSheet; label: string; value: string; missing?: boolean }[] = [
     { id: 'date', label: 'Date', value: draftFlight.date },
     {
       id: 'flight',
@@ -506,7 +592,12 @@ export function FlightDraftCard({
     {
       id: 'passengers',
       label: 'Passengers',
-      value: passengers === 1 ? '1 passenger' : `${passengers} passengers`,
+      value: needsPassengers
+        ? 'Select passengers'
+        : passengers === 1
+          ? '1 passenger'
+          : `${passengers} passengers`,
+      missing: needsPassengers,
     },
   ]
 
@@ -714,9 +805,16 @@ export function FlightDraftCard({
                       }`}
                     >
                       <span className="text-[12px] text-ink-tertiary">{f.label}</span>
-                      <span className="flex items-center gap-1.5 truncate text-[13.5px] font-semibold text-ink">
+                      <span
+                        className={`flex items-center gap-1.5 truncate text-[13.5px] font-semibold ${
+                          f.missing ? 'text-[#c77d00]' : 'text-ink'
+                        }`}
+                      >
+                        {f.missing && (
+                          <span aria-hidden="true" className="size-1.5 rounded-full bg-[#f6a821]" />
+                        )}
                         {f.value}
-                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9a9a9a" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke={f.missing ? '#c77d00' : '#9a9a9a'} strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
                           <path d="m9 5 7 7-7 7" />
                         </svg>
                       </span>
@@ -724,28 +822,115 @@ export function FlightDraftCard({
                   ))}
                   <div className="flex h-[42px] items-center justify-between gap-3 rounded-b-[16px] border-t border-black/[0.05] px-4">
                     <span className="text-[12px] text-ink-tertiary">Total</span>
-                    <span className="text-[13.5px] font-bold text-ink">${total}</span>
+                    {/* No passenger count yet — the total can't honestly
+                        add itself, so the fare stays per-seat. */}
+                    <span className="text-[13.5px] font-bold text-ink">
+                      {needsPassengers ? `$${unit} / passenger` : `$${total}`}
+                    </span>
                   </div>
                 </div>
 
-                {/* The go — payment is the next room, not the trigger. */}
-                <button
-                  type="button"
-                  onClick={() => setFace('payment')}
-                  className="flex h-12 w-full items-center justify-center rounded-full text-[13.5px] font-semibold text-white outline-none transition-all duration-200 active:brightness-95"
-                  style={{ background: brand }}
-                >
-                  Continue to payment
-                </button>
+                {/* The go. A missing fact (2H) owns the CTA until it's
+                    answered; without a default, payment is the next room;
+                    with one applied, the go IS the payment — one tap, worn
+                    in the default lane's own colors. */}
+                {needsPassengers ? (
+                  <button
+                    type="button"
+                    disabled={processing}
+                    onClick={() => setSheet('passengers')}
+                    className="flex h-12 w-full items-center justify-center rounded-full text-[13.5px] font-semibold text-white outline-none transition-all duration-200 active:brightness-95"
+                    style={{ background: brand }}
+                  >
+                    Select passengers to continue
+                  </button>
+                ) : !savedDefault ? (
+                  <button
+                    type="button"
+                    onClick={() => setFace('payment')}
+                    className="flex h-12 w-full items-center justify-center rounded-full text-[13.5px] font-semibold text-white outline-none transition-all duration-200 active:brightness-95"
+                    style={{ background: brand }}
+                  >
+                    Continue to payment
+                  </button>
+                ) : savedDefault.method === 'applepay' ? (
+                  <button
+                    type="button"
+                    disabled={processing}
+                    onClick={() => setWalletSheet('applepay')}
+                    className="flex h-12 w-full items-center justify-center gap-1.5 rounded-full bg-black text-white outline-none transition-transform duration-200 ease-out active:scale-[0.98] disabled:opacity-60"
+                  >
+                    <AppleMark />
+                    <span className="text-[15px] font-medium tracking-[-0.01em]">
+                      Pay &middot; ${total}
+                    </span>
+                  </button>
+                ) : savedDefault.method === 'link' ? (
+                  <button
+                    type="button"
+                    disabled={processing}
+                    onClick={() => setWalletSheet('link')}
+                    className="flex h-12 w-full items-center justify-center rounded-full bg-[#00d66f] outline-none transition-transform duration-200 ease-out active:scale-[0.98] disabled:opacity-60"
+                  >
+                    <span className="text-[15px] font-bold tracking-[-0.02em] text-[#011e0f] italic">
+                      Pay ${total} with Link
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={processing}
+                    onClick={() => pay('card', { viaDefault: true })}
+                    className="flex h-12 w-full items-center justify-center rounded-full text-[13.5px] font-semibold text-white outline-none transition-all duration-200 active:brightness-95 disabled:opacity-60"
+                    style={{
+                      background: processing
+                        ? `color-mix(in srgb, ${brand} 82%, black)`
+                        : brand,
+                    }}
+                  >
+                    {processing
+                      ? 'Processing payment\u2026'
+                      : `Pay $${total} \u00B7 ${paymentLabel('card', savedDefault.cardLast4, savedDefault.cardBrand)}`}
+                  </button>
+                )}
 
-                <p className="-mt-1 text-center text-[10.5px] text-ink-tertiary">
-                  Nothing is charged yet &middot; free cancellation for 24 hours
-                </p>
+                {/* The default payment belongs under the CTA it powers —
+                    named, marked as the default, and changeable — not among
+                    the facts of what's being purchased. */}
+                {savedDefault ? (
+                  <div className="-mt-1 flex flex-col gap-[3px]">
+                    <p className="text-center text-[10.5px] leading-snug text-ink-tertiary">
+                      Pays with{' '}
+                      {paymentLabel(
+                        savedDefault.method,
+                        savedDefault.cardLast4,
+                        savedDefault.cardBrand,
+                      )}{' '}
+                      &mdash; your default &middot;{' '}
+                      <button
+                        type="button"
+                        disabled={processing}
+                        onClick={() => setFace('payment')}
+                        className="font-medium text-ink underline decoration-black/25 underline-offset-2 outline-none"
+                      >
+                        Change
+                      </button>
+                    </p>
+                    <p className="text-center text-[10.5px] text-ink-tertiary">
+                      Free cancellation for 24 hours
+                    </p>
+                  </div>
+                ) : (
+                  <p className="-mt-1 text-center text-[10.5px] text-ink-tertiary">
+                    Nothing is charged yet &middot; free cancellation for 24 hours
+                  </p>
+                )}
               </motion.div>
             ) : (
               /* ── Payment face ─────────────────────────────────────── */
               <motion.div
                 key="payment"
+                ref={paymentFaceRef}
                 initial={{ opacity: 0, scale: 0.98, filter: 'blur(4px)' }}
                 animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
                 exit={{ opacity: 0, scale: 0.98, filter: 'blur(4px)' }}
@@ -768,45 +953,47 @@ export function FlightDraftCard({
                   <span className="text-[12.5px] font-bold text-ink">${total}</span>
                 </div>
 
-                {/* What the money buys — the flight named like a ticket
-                    (carrier + number + route), facts on the quiet line. */}
-                <div className="-mt-1.5 flex flex-col gap-[3px]">
-                  <p className="text-[13px] font-semibold tracking-[-0.01em] text-ink">
-                    {airline.name} {flightNumber(draftFlight.id)} &middot; {draftFlight.fromCode}{' '}
-                    &rarr; {draftFlight.toCode}
-                  </p>
-                  <p className="text-[11.5px] leading-snug text-ink-tertiary">
-                    {draftFlight.date} &middot; {draftFlight.departs} &middot;{' '}
-                    {passengers === 1 ? '1 passenger' : `${passengers} passengers`} &middot; taxes
-                    &amp; fees included
-                  </p>
-                </div>
-
-                {/* One-tap wallets. */}
+                {/* One-tap wallets. With the required fact still missing
+                    (2H), every lane routes back to the passengers ask. */}
                 <div className="flex flex-col gap-2">
                   <button
                     type="button"
                     disabled={processing}
-                    onClick={() => setWalletSheet('applepay')}
-                    className="flex h-12 w-full items-center justify-center gap-1.5 rounded-full bg-black text-white outline-none transition-transform duration-200 ease-out active:scale-[0.98] disabled:opacity-60"
+                    onClick={() =>
+                      needsPassengers ? askPassengers() : setWalletSheet('applepay')
+                    }
+                    className="relative flex h-12 w-full items-center justify-center gap-1.5 rounded-full bg-black text-white outline-none transition-transform duration-200 ease-out active:scale-[0.98] disabled:opacity-60"
                   >
                     <AppleMark />
                     <span className="text-[15px] font-medium tracking-[-0.01em]">Pay</span>
+                    {savedDefault?.method === 'applepay' && (
+                      <span className="absolute top-1/2 right-3.5 flex h-5 -translate-y-1/2 items-center rounded-full border border-dashed border-white/35 px-2 text-[9px] font-semibold tracking-[0.1em] text-white/60 uppercase">
+                        Default
+                      </span>
+                    )}
                   </button>
                   <button
                     type="button"
                     disabled={processing}
-                    onClick={() => setWalletSheet('link')}
-                    className="flex h-12 w-full items-center justify-center rounded-full bg-[#00d66f] outline-none transition-transform duration-200 ease-out active:scale-[0.98] disabled:opacity-60"
+                    onClick={() => (needsPassengers ? askPassengers() : setWalletSheet('link'))}
+                    className="relative flex h-12 w-full items-center justify-center gap-1.5 rounded-full bg-[#00d66f] outline-none transition-transform duration-200 ease-out active:scale-[0.98] disabled:opacity-60"
                   >
                     <span className="text-[15px] font-bold tracking-[-0.02em] text-[#011e0f] italic">
                       Link
                     </span>
+                    {savedDefault?.method === 'link' && (
+                      <span className="absolute top-1/2 right-3.5 flex h-5 -translate-y-1/2 items-center rounded-full border border-dashed border-[#011e0f]/30 px-2 text-[9px] font-semibold tracking-[0.1em] text-[#011e0f]/60 uppercase not-italic">
+                        Default
+                      </span>
+                    )}
                   </button>
                 </div>
 
-                {/* Or the manual lane. */}
-                <div className="flex items-center gap-3">
+                {/* Or the manual lane — the number field sits in the open.
+                    Completing the number locks it into a brand chip and the
+                    expiry / CVC fields replace it in place; the pay button
+                    grows in with them. */}
+                <div aria-hidden="true" className="flex w-full items-center gap-3 py-0.5">
                   <span className="h-px flex-1 bg-black/[0.07]" />
                   <span className="text-[10.5px] font-medium tracking-[0.06em] text-ink-tertiary uppercase">
                     or pay with card
@@ -814,69 +1001,163 @@ export function FlightDraftCard({
                   <span className="h-px flex-1 bg-black/[0.07]" />
                 </div>
 
-                <div className="flex flex-col gap-2">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="cc-number"
-                    placeholder="Card number"
-                    aria-label="Card number"
-                    disabled={processing}
-                    value={cardNumber}
-                    onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
-                    className="h-12 w-full rounded-[14px] bg-black/[0.04] px-4 text-[14px] font-medium text-ink outline-none placeholder:text-ink-tertiary/70 focus:bg-black/[0.06]"
-                  />
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="cc-exp"
-                      placeholder="MM/YY"
-                      aria-label="Expiry date"
-                      disabled={processing}
-                      value={expiry}
-                      onChange={(e) => setExpiry(formatExpiry(e.target.value))}
-                      className="h-12 min-w-0 flex-1 rounded-[14px] bg-black/[0.04] px-4 text-[14px] font-medium text-ink outline-none placeholder:text-ink-tertiary/70 focus:bg-black/[0.06]"
-                    />
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="cc-csc"
-                      placeholder="CVC"
-                      aria-label="Security code"
-                      disabled={processing}
-                      value={cvc}
-                      onChange={(e) => setCvc(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                      className="h-12 min-w-0 flex-1 rounded-[14px] bg-black/[0.04] px-4 text-[14px] font-medium text-ink outline-none placeholder:text-ink-tertiary/70 focus:bg-black/[0.06]"
-                    />
-                  </div>
+                <div className="flex flex-col gap-2.5">
+                  <motion.div layout className="flex gap-2">
+                    <AnimatePresence initial={false} mode="popLayout">
+                      {!numberLocked ? (
+                        <motion.input
+                          key="card-number"
+                          layout
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                          transition={{ duration: 0.25, ease: EASE }}
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="cc-number"
+                          placeholder="Card number"
+                          aria-label="Card number"
+                          disabled={processing}
+                          value={cardNumber}
+                          onChange={(e) => handleCardNumber(e.target.value)}
+                          className="h-12 w-full min-w-0 flex-1 rounded-[14px] bg-black/[0.04] px-4 text-[14px] font-medium text-ink outline-none placeholder:text-ink-tertiary/70 focus:bg-black/[0.06]"
+                        />
+                      ) : (
+                        <motion.button
+                          key="card-chip"
+                          layout
+                          initial={{ opacity: 0, scale: 0.94 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                          transition={{ duration: 0.25, ease: EASE }}
+                          type="button"
+                          aria-label="Edit card number"
+                          disabled={processing}
+                          onClick={() => setNumberLocked(false)}
+                          className="flex h-12 shrink-0 items-center gap-1.5 rounded-[14px] bg-black/[0.04] px-3.5 text-[13.5px] font-semibold whitespace-nowrap text-ink outline-none transition-colors duration-150 active:bg-black/[0.07]"
+                        >
+                          {cardBrandOf(cardNumber)} &middot;&middot;{' '}
+                          {cardNumber.replace(/\D/g, '').slice(-4)}
+                        </motion.button>
+                      )}
+                      {numberLocked && (
+                        <motion.input
+                          key="card-expiry"
+                          layout
+                          initial={{ opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                          transition={{ duration: 0.25, ease: EASE }}
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="cc-exp"
+                          placeholder="MM/YY"
+                          aria-label="Expiry date"
+                          autoFocus
+                          disabled={processing}
+                          value={expiry}
+                          onChange={(e) => setExpiry(formatExpiry(e.target.value))}
+                          className="h-12 min-w-0 flex-1 rounded-[14px] bg-black/[0.04] px-3.5 text-[14px] font-medium text-ink outline-none placeholder:text-ink-tertiary/70 focus:bg-black/[0.06]"
+                        />
+                      )}
+                      {numberLocked && (
+                        <motion.input
+                          key="card-cvc"
+                          layout
+                          initial={{ opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                          transition={{ duration: 0.25, ease: EASE, delay: 0.04 }}
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="cc-csc"
+                          placeholder="CVC"
+                          aria-label="Security code"
+                          disabled={processing}
+                          value={cvc}
+                          onChange={(e) => setCvc(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                          className="h-12 min-w-0 flex-1 rounded-[14px] bg-black/[0.04] px-3.5 text-[14px] font-medium text-ink outline-none placeholder:text-ink-tertiary/70 focus:bg-black/[0.06]"
+                        />
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+
+                  {/* The card lane's go — arrives with the second wave of
+                      fields, so the row's replace-in-place stays the event. */}
+                  <AnimatePresence initial={false}>
+                    {numberLocked && (
+                      <motion.div
+                        key="card-pay"
+                        className="overflow-hidden"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.32, ease: EASE }}
+                      >
+                        <button
+                          type="button"
+                          disabled={(!cardReady && !processing) || processing}
+                          onClick={() => (needsPassengers ? askPassengers() : setSavePrompt(true))}
+                          className={`flex h-12 w-full items-center justify-center rounded-full text-[13.5px] font-semibold outline-none transition-all duration-200 ${
+                            cardReady || processing ? 'text-white active:brightness-95' : 'text-ink-tertiary'
+                          }`}
+                          style={{
+                            background: processing
+                              ? `color-mix(in srgb, ${brand} 82%, black)`
+                              : cardReady
+                                ? brand
+                                : 'rgba(0,0,0,0.05)',
+                          }}
+                        >
+                          {processing ? 'Processing payment\u2026' : `Pay $${total}`}
+                        </button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* The card lane's own reassurance — visible from the
+                      first keystroke. */}
+                  <p className="flex items-center justify-center gap-1.5 text-center text-[10.5px] text-ink-tertiary">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <rect x="4" y="10" width="16" height="11" rx="2.5" />
+                      <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+                    </svg>
+                    Encrypted &middot; your card details are never stored
+                  </p>
                 </div>
 
+                {/* The remembered-preference control — one switch covering
+                    every lane: whichever way this booking pays becomes the
+                    wallet's default for future checkouts. */}
                 <button
                   type="button"
-                  disabled={(!cardReady && !processing) || processing}
-                  onClick={() => setSavePrompt(true)}
-                  className={`flex h-12 w-full items-center justify-center rounded-full text-[13.5px] font-semibold outline-none transition-all duration-200 ${
-                    cardReady || processing ? 'text-white active:brightness-95' : 'text-ink-tertiary'
-                  }`}
-                  style={{
-                    background: processing
-                      ? `color-mix(in srgb, ${brand} 82%, black)`
-                      : cardReady
-                        ? brand
-                        : 'rgba(0,0,0,0.05)',
-                  }}
+                  role="switch"
+                  aria-checked={saveAsDefault}
+                  disabled={processing}
+                  onClick={() => setSaveAsDefault((v) => !v)}
+                  className="flex items-center justify-between gap-3 rounded-[14px] bg-black/[0.03] px-4 py-3 text-left outline-none transition-colors duration-150 active:bg-black/[0.05]"
                 >
-                  {processing ? 'Processing payment\u2026' : `Pay $${total}`}
+                  <span className="flex flex-col gap-px">
+                    <span className="text-[12.5px] font-semibold text-ink">
+                      Save as default payment method
+                    </span>
+                    <span className="text-[11px] leading-snug text-ink-tertiary">
+                      Future checkouts lead with whichever way you pay
+                    </span>
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-[23px] w-[38px] shrink-0 items-center rounded-full p-[2px] transition-colors duration-200 ${
+                      saveAsDefault ? 'bg-ink' : 'bg-black/[0.12]'
+                    }`}
+                  >
+                    <span
+                      className={`size-[19px] rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition-transform duration-200 ${
+                        saveAsDefault ? 'translate-x-[15px]' : ''
+                      }`}
+                    />
+                  </span>
                 </button>
-
-                <p className="-mt-1 flex items-center justify-center gap-1.5 text-center text-[10.5px] text-ink-tertiary">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <rect x="4" y="10" width="16" height="11" rx="2.5" />
-                    <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-                  </svg>
-                  Encrypted &middot; your card details are never stored
-                </p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -1048,7 +1329,7 @@ export function FlightDraftCard({
                       <div className="mt-4 flex flex-col gap-2">
                         {AIRLINE_FLIGHTS[airline.id].map((f) => {
                           const selected = f.departs === draftFlight.departs
-                          const short = f.seats < passengers
+                          const short = f.seats < pax
                           return (
                             <button
                               key={f.id}
@@ -1080,7 +1361,7 @@ export function FlightDraftCard({
                                   className={`text-[11.5px] ${selected ? 'text-white/70' : 'text-ink-tertiary'}`}
                                 >
                                   {short
-                                    ? `Only ${f.seats} ${f.seats === 1 ? 'seat' : 'seats'} left \u2014 you have ${passengers} passengers`
+                                    ? `Only ${f.seats} ${f.seats === 1 ? 'seat' : 'seats'} left \u2014 you have ${pax} passengers`
                                     : `${f.cabin} \u00B7 ${f.seats} seats`}
                                 </span>
                               </span>

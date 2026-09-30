@@ -486,9 +486,30 @@ type TicketExchange = {
   total: number
 }
 
+/** The stub's QR modules — a fixed scatter on a 21-unit grid (a v1 QR's
+    geometry), steering clear of the three finder squares. Decorative, but
+    dense enough to read as a real gate-scan code. */
+const QR_MODULES: ReadonlyArray<readonly [number, number]> = [
+  [8, 0], [10, 1], [9, 2], [12, 2], [8, 3], [11, 4], [9, 5], [12, 5],
+  [8, 6], [10, 6], [12, 6],
+  [0, 8], [2, 8], [5, 8], [9, 8], [11, 8], [13, 8], [16, 8], [18, 8], [20, 8],
+  [1, 9], [4, 9], [8, 9], [12, 9], [15, 9], [19, 9],
+  [3, 10], [6, 10], [9, 10], [13, 10], [17, 10], [20, 10],
+  [0, 11], [5, 11], [10, 11], [14, 11], [18, 11],
+  [2, 12], [6, 12], [8, 12], [11, 12], [16, 12], [19, 12],
+  [9, 13], [13, 13], [17, 13], [20, 13],
+  [8, 14], [10, 14], [14, 14], [18, 14],
+  [9, 15], [12, 15], [16, 15], [20, 15],
+  [8, 16], [11, 16], [15, 16], [19, 16],
+  [10, 17], [13, 17], [17, 17],
+  [8, 18], [12, 18], [16, 18], [20, 18],
+  [9, 19], [14, 19], [18, 19],
+  [10, 20], [13, 20], [17, 20], [20, 20],
+]
+
 /** The confirmed keepsake — a compact ticket tossed into the thread with
     the snapshot-pile tilt (2E's ConfirmedFlightKeepsake grammar): the
-    matchup and seats beside a torn stub's barcode, the seller's mark on
+    matchup and seats beside a torn stub's QR code, the seller's mark on
     the stub. */
 function ConfirmedTicketKeepsake({ ex }: { ex: TicketExchange }) {
   const [home, away] = ex.game.teams
@@ -538,17 +559,31 @@ function ConfirmedTicketKeepsake({ ex }: { ex: TicketExchange }) {
               {ex.listing.row} &middot; {ex.quantity} seats
             </p>
           </div>
-          {/* The stub — the seller's mark over a barcode, past a perforation. */}
+          {/* The stub — the seller's mark over a QR code, past a perforation. */}
           <div className="flex flex-col items-center justify-center gap-1.5 border-l-2 border-dashed border-black/15 px-3 py-2.5">
             <TicketMark provider={ex.provider} size={16} />
-            <div
-              aria-hidden="true"
-              className="h-6 w-6"
-              style={{
-                backgroundImage:
-                  'repeating-linear-gradient(0deg, #1a1721 0 2px, transparent 2px 5px)',
-              }}
-            />
+            <svg aria-hidden="true" width="24" height="24" viewBox="0 0 21 21" fill="#1a1721">
+              {/* Finder squares in three corners. */}
+              {(
+                [
+                  [0, 0],
+                  [14, 0],
+                  [0, 14],
+                ] as const
+              ).map(([x, y]) => (
+                <g key={`${x}-${y}`}>
+                  <path
+                    fillRule="evenodd"
+                    d={`M${x} ${y}h7v7h-7z M${x + 1} ${y + 1}v5h5v-5z`}
+                  />
+                  <rect x={x + 2} y={y + 2} width="3" height="3" />
+                </g>
+              ))}
+              {/* Data modules — a fixed scatter, dense enough to read as QR. */}
+              {QR_MODULES.map(([x, y]) => (
+                <rect key={`${x}.${y}`} x={x} y={y} width="1" height="1" />
+              ))}
+            </svg>
           </div>
         </div>
 
@@ -759,8 +794,8 @@ export function SportsView({ title = 'Spurs Season' }: { title?: string }) {
             {sellerInfo.name} has a pair together in the {TIER_LABELS[leadListing.tier].toLowerCase()}
           </span>{' '}
           &mdash; Sec {leadListing.section}, Row {leadListing.row} at ${leadListing.price} each,{' '}
-          {leadListing.tags[1].toLowerCase()}. Tap a listing to see the seats, or swipe for more
-          sections.
+          {leadListing.tags[1].toLowerCase()}. Tap a listing to see the seats, swipe for more
+          sections, or view every pair they list.
         </p>
         <TicketChips active={seller} onSelect={setSeller} />
         <div className="mt-1">
@@ -770,6 +805,7 @@ export function SportsView({ title = 'Spurs Season' }: { title?: string }) {
             onSelect={(l, el) => openTicket(TICKET_GAME, l, el)}
           />
         </div>
+        <ViewMorePill onOpen={openList('tickets')} />
       </Exchange>
 
       {/* Live-game inquiry → the scoreboard. */}
@@ -896,9 +932,12 @@ export function SportsView({ title = 'Spurs Season' }: { title?: string }) {
                 origin={list.origin}
                 provider={provider}
                 onSelectProvider={setProvider}
+                seller={seller}
+                onSelectSeller={setSeller}
                 onClose={() => setList(null)}
                 onSelectGame={openPreview}
                 onSelectTeam={openTeam}
+                onSelectListing={(l, el) => openTicket(TICKET_GAME, l, el)}
               />
             )}
           </AnimatePresence>,

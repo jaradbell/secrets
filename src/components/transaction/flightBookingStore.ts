@@ -19,6 +19,8 @@ export type FlightBookingDetails = {
   cardLast4?: string
   /** The user said yes to keeping the card for future purchases. */
   savedToWallet?: boolean
+  /** This payment was ALSO saved as the wallet's default on the way through. */
+  savedAsDefault?: boolean
   total: number
 }
 
@@ -28,6 +30,21 @@ export const flightBooking: FlightBookingDetails = {
   passengers: 1,
   method: 'applepay',
   total: 0,
+}
+
+/** A remembered payment preference — enough to lead the next checkout
+    with it (method + the card face when the method is a card). */
+export type DefaultPayment = {
+  method: FlightPaymentMethod
+  cardBrand?: string
+  cardLast4?: string
+}
+
+/** The wallet — 2E's "save as default payment method" control writes it,
+    and 2F (the default-applied fork) reads it to front-load checkout.
+    Module singleton, same prototype-grade lifetime as flightBooking. */
+export const wallet: { defaultPayment: DefaultPayment | null } = {
+  defaultPayment: null,
 }
 
 /** How the payment reads on receipts ("Apple Pay", "Link", "Visa ·· 4242"). */

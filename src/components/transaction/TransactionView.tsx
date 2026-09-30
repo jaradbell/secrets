@@ -222,6 +222,7 @@ export function TransactionView({
   title = 'Sisters Birthday Weekend',
   onCollapse,
   onIslandTap,
+  instantBook = false,
 }: {
   variant?: TransactionVariant
   /** The island's conversation name (1C threads carry their own). */
@@ -231,6 +232,12 @@ export function TransactionView({
   /** Overrides the island tap — 5B opens the project container instead
       of the default receipts fan. */
   onIslandTap?: () => void
+  /** 2F's flow shape pointed at places (8B): the ask carried full context,
+      so the details view's "Get reservation" completes the whole booking
+      in one tap and the confirmation blooms straight in — the checkout
+      sheet never appears. Reservations are free, so unlike 2F no payment
+      rides the tap. */
+  instantBook?: boolean
 }) {
   const [provider, setProvider] = useState<ProviderId>('yelp')
   const [selected, setSelected] = useState<{
@@ -868,13 +875,17 @@ export function TransactionView({
                 result={selected.result}
                 origin={selected.origin}
                 onClose={() => setSelected(null)}
+                instantBook={instantBook}
               />
             )}
           </AnimatePresence>,
           screenEl,
         )}
 
+      {/* The instant-book fork has no speed bump: the details view's tap
+          already completed the booking, so the checkout sheet stands down. */}
       {variant === '2d' &&
+        !instantBook &&
         screenEl &&
         createPortal(
           <AnimatePresence>{confirming && <CheckoutView key="checkout" />}</AnimatePresence>,

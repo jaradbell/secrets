@@ -160,6 +160,46 @@ const PROTOTYPES: {
     ),
   },
   {
+    // 2E with the wallet's default payment method and nothing missing —
+    // so no speed bump at all: "Book & pay" in the details view charges
+    // the default (Apple Pay seeded; a default saved through 2E's switch
+    // carries over) and blooms straight into the receipt. The draft stage
+    // never appears — it has no question left to ask.
+    id: 'transaction-2f',
+    tag: '2F',
+    label: 'Default Payment',
+    ambient: 'composer',
+    render: () => (
+      <ReservationProvider>
+        <VoiceControl
+          followUp="none"
+          receipt={FlightBookingReceipt}
+          idleContent={<FlightBookingView variant="2f" />}
+        />
+      </ReservationProvider>
+    ),
+  },
+  {
+    // The draft card earns its stop: the ask arrives missing a required
+    // fact (passenger count), so the flow lands on the draft with the gap
+    // flagged — amber "Select passengers" row, the CTA asking for it.
+    // Once answered, the wallet's default payment books in one tap; the
+    // default itself reads below the CTA with a "Change" stop.
+    id: 'transaction-2h',
+    tag: '2H',
+    label: 'Missing Detail',
+    ambient: 'composer',
+    render: () => (
+      <ReservationProvider>
+        <VoiceControl
+          followUp="none"
+          receipt={FlightBookingReceipt}
+          idleContent={<FlightBookingView variant="2h" />}
+        />
+      </ReservationProvider>
+    ),
+  },
+  {
     // 1:1 fork of Transaction (components copied to src/components/receipt/)
     // — a sandbox to build on without touching the transaction prototype.
     id: 'receipt',
@@ -514,9 +554,11 @@ const PROTOTYPES: {
   {
     // Places: the current restaurant treatment for the same two surfaces —
     // the thread's frosted card stack and the Compare map + list sheet.
-    // Booking runs 2E's grammar end to end: checkout confirms into the
-    // full-screen receipt, whose celebration is branded by the provider
-    // that sourced the place (the brand ball morph).
+    // Booking runs 2F's flow shape (no payment — reservations are free):
+    // the ask carried full context, so the details view's "Get reservation"
+    // completes the booking in one tap and blooms straight into the
+    // full-screen receipt — no checkout speed bump. The celebration is
+    // branded by the provider that sourced the place (the brand ball morph).
     id: 'list-results-8b',
     tag: '8B',
     label: 'Places',
@@ -527,7 +569,7 @@ const PROTOTYPES: {
           <VoiceControl
             followUp="none"
             receipt={PlaceBookingReceipt}
-            idleContent={<TransactionView variant="2d" />}
+            idleContent={<TransactionView variant="2d" instantBook />}
           />
         </ReservationProvider>
       </MatchStyleProvider>

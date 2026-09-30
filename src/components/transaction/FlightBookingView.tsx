@@ -13,7 +13,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ConversationHeader } from './ConversationHeader'
 import { AIRLINES, AIRLINE_FLIGHTS, type Airline, type AirlineId, type FlightOption } from './flightData'
-import { flightBooking, paymentLabel, type FlightPaymentMethod } from './flightBookingStore'
+import { flightBooking, paymentLabel, wallet, type FlightPaymentMethod } from './flightBookingStore'
 import { CancelledFlightArtifact, FlightDraftCard } from './FlightDraftCard'
 import { FlightDetailsView, type DetailsOrigin } from './FlightDetailsView'
 import { FlightListView, type ListOrigin } from './FlightListView'
@@ -49,6 +49,7 @@ type FlightResolution =
       cardBrand?: string
       cardLast4?: string
       savedToWallet?: boolean
+      savedAsDefault?: boolean
       total: number
     }
 
@@ -124,7 +125,26 @@ function ConfirmedFlightKeepsake({ flight, airline }: { flight: FlightOption; ai
   )
 }
 
-export function FlightBookingView({ title = 'Sisters Birthday Weekend' }: { title?: string }) {
+export function FlightBookingView({
+  title = 'Sisters Birthday Weekend',
+  variant = '2e',
+}: {
+  title?: string
+  /** Which checkout fork this thread runs:
+      - '2e' — the base draft flow: every booking stops on the draft card
+        and pays through its payment face.
+      - '2f' — default payment, no speed bump: nothing is missing and the
+        wallet holds a default, so "Book this flight" completes the whole
+        transaction — no draft stage at all.
+      - '2h' — the draft card earns its stop: a required fact (passenger
+        count) is missing, so the flow lands on the draft with the gap
+        flagged; answering it leaves a one-tap default payment.
+      The wallet is seeded with Apple Pay for 2F/2H so the forks demo
+      standalone, but a default saved in 2E's switch carries over. */
+  variant?: '2e' | '2f' | '2h'
+}) {
+  const defaultPay = variant === '2f' || variant === '2h'
+  if (defaultPay && !wallet.defaultPayment) wallet.defaultPayment = { method: 'applepay' }
   const [airline, setAirline] = useState<AirlineId>('southwest')
   const [listOrigin, setListOrigin] = useState<ListOrigin | null>(null)
   // The drill-in — a tapped ticket morphs open into the flight's details.
@@ -189,15 +209,38 @@ export function FlightBookingView({ title = 'Sisters Birthday Weekend' }: { titl
     })
   }
 
-  /** The details sheet's go opens a booking exchange. */
+  /** The details sheet's go opens a booking exchange — or, in 2F, IS the
+      whole transaction: with nothing missing and a default payment on
+      file there's no reason to stop, so the booking charges the default
+      and blooms straight into the receipt. */
   const startBooking = (flight: FlightOption, from: Airline) => {
     if (stage === 'booking' || stage === 'receipt') return
     setDetails(null)
     setListOrigin(null)
+    if (variant === '2f') {
+      const dp = wallet.defaultPayment ?? { method: 'applepay' as const }
+      flightBooking.flight = flight
+      flightBooking.airline = from
+      flightBooking.passengers = 1
+      flightBooking.method = dp.method
+      flightBooking.cardBrand = dp.method === 'card' ? (dp.cardBrand ?? 'Visa') : undefined
+      flightBooking.cardLast4 = dp.method === 'card' ? (dp.cardLast4 ?? '4242') : undefined
+      flightBooking.savedToWallet = undefined
+      flightBooking.savedAsDefault = undefined
+      flightBooking.total = flight.price
+      appendExchange(
+        `Book the ${flight.departs} ${from.name} flight`,
+        `Booking it now \u2014 $${flight.price} on ${paymentLabel(dp.method, dp.cardLast4, dp.cardBrand)}, your default.`,
+      )
+      flow?.begin({ date: flight.date, time: flight.departs, party: 1 }, flight.id)
+      return
+    }
     setDraft({ flight, airline: from })
     appendExchange(
       `Book the ${flight.departs} ${from.name} flight`,
-      `Here's your draft \u2014 ${from.name} ${flight.fromCode} \u2192 ${flight.toCode} on ${flight.date}, departing ${flight.departs}. Check the details, set passengers, and continue to payment when you're ready.`,
+      variant === '2h'
+        ? `Almost there \u2014 ${from.name} ${flight.fromCode} \u2192 ${flight.toCode} on ${flight.date}, departing ${flight.departs}. One thing before I can book it: how many passengers?`
+        : `Here's your draft \u2014 ${from.name} ${flight.fromCode} \u2192 ${flight.toCode} on ${flight.date}, departing ${flight.departs}. Check the details, set passengers, and continue to payment when you're ready.`,
     )
   }
 
@@ -222,6 +265,7 @@ export function FlightBookingView({ title = 'Sisters Birthday Weekend' }: { titl
             cardBrand: flightBooking.cardBrand,
             cardLast4: flightBooking.cardLast4,
             savedToWallet: flightBooking.savedToWallet,
+            savedAsDefault: flightBooking.savedAsDefault,
             total: flightBooking.total,
           },
         },
@@ -378,6 +422,8 @@ export function FlightBookingView({ title = 'Sisters Birthday Weekend' }: { titl
                           &mdash; boarding passes are in your email.
                           {receiptShown.savedToWallet &&
                             ' Your card is saved in your wallet for next time.'}
+                          {receiptShown.savedAsDefault &&
+                            ` ${paymentLabel(receiptShown.method, receiptShown.cardLast4, receiptShown.cardBrand)} is now your default payment method.`}
                         </>
                       ) : (
                         ex.assistant
@@ -391,6 +437,8 @@ export function FlightBookingView({ title = 'Sisters Birthday Weekend' }: { titl
                           key="draft"
                           flight={draft.flight}
                           airline={draft.airline}
+                          defaultPay={defaultPay}
+                          missingPassengers={variant === '2h'}
                           onOpenDetails={(el) => openDetails(draft.flight, draft.airline, el)}
                           onCancelled={() => {
                             resolveExchange(ex.id, {
@@ -450,6 +498,17 @@ export function FlightBookingView({ title = 'Sisters Birthday Weekend' }: { titl
                 flight={details.flight}
                 airline={details.airline}
                 origin={details.origin}
+                // 2F charges on this tap — the button and its caption own up.
+                bookLabel={
+                  variant === '2f' && details.bookable
+                    ? `Book & pay $${details.flight.price}`
+                    : undefined
+                }
+                bookCaption={
+                  variant === '2f' && details.bookable && wallet.defaultPayment
+                    ? `Pays with ${paymentLabel(wallet.defaultPayment.method, wallet.defaultPayment.cardLast4, wallet.defaultPayment.cardBrand)}, your default \u00B7 free cancellation for 24 hours`
+                    : undefined
+                }
                 onClose={() => setDetails(null)}
                 onBook={
                   details.bookable

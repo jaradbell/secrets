@@ -118,6 +118,8 @@ export function FlightDetailsView({
   origin,
   onClose,
   onBook,
+  bookLabel,
+  bookCaption,
 }: {
   flight: FlightOption
   airline: Airline
@@ -126,6 +128,10 @@ export function FlightDetailsView({
   /** The sheet's go — omitted when the booking is already drafted (opened
       from the draft card), where the card below carries the transaction. */
   onBook?: () => void
+  /** Override the go's label + caption — 2F's no-speed-bump fork books and
+      pays in the same tap, so the button has to say so. */
+  bookLabel?: string
+  bookCaption?: string
 }) {
   // The details surface owns the moment — the orb stays live, hint down.
   const setHintSuppressed = useReservationFlow()?.setHintSuppressed
@@ -326,10 +332,10 @@ export function FlightDetailsView({
                   className="flex h-12 w-full items-center justify-center rounded-full text-[13.5px] font-semibold text-white outline-none transition-all duration-200 active:brightness-95"
                   style={{ background: airline.brandColor }}
                 >
-                  Book this flight
+                  {bookLabel ?? 'Book this flight'}
                 </button>
                 <p className="-mt-1 text-center text-[10.5px] text-ink-tertiary">
-                  Nothing is charged yet &middot; free cancellation for 24 hours
+                  {bookCaption ?? 'Nothing is charged yet \u00B7 free cancellation for 24 hours'}
                 </p>
               </>
             ) : (
