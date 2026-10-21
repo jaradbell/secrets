@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { AltitudeHome } from '../components/home/AltitudeHome'
 import { MobileAppShell } from '../components/shell/MobileAppShell'
 import { RECEIPT_DOCK_SUGGESTIONS } from '../components/receipt/dockSuggestions'
@@ -20,6 +21,7 @@ import { ReservationProvider } from '../components/transaction/reservationFlow'
 import { SportsView } from '../components/transaction/SportsView'
 import { StaysView } from '../components/transaction/StaysView'
 import { TransactionView } from '../components/transaction/TransactionView'
+import { AtomSplash } from '../components/voice/AtomSplash'
 import { EmptyState } from '../components/voice/EmptyState'
 import { GooLoader } from '../components/voice/GooLoader'
 import { GooLoaderGooey } from '../components/voice/GooLoaderGooey'
@@ -335,6 +337,18 @@ const PROTOTYPES: {
         <GooLoaderGooey size={110} />
       </div>
     ),
+  },
+  {
+    // Launch splash after GetYourGuide's logo splash (60fps shot
+    // getyourguide-logo-splash-animation), in our ink: the crisp atom
+    // mark on black births, melts, buds into the ATOM wordmark, gathers
+    // into the 6A loader beat, dies to a dot, and the dot opens as a
+    // circular window onto the Secrets demo home.
+    id: 'atom-splash',
+    tag: '6D',
+    label: 'Splash',
+    ambient: 'composer',
+    render: () => <AtomSplashDemo />,
   },
   // Match score explorations — the 2D checkout flow duplicated three ways.
   // The flow, data, and components are shared; MatchStyleProvider swaps how
@@ -665,6 +679,35 @@ function LoaderArcDemo() {
         }}
       />
     </button>
+  )
+}
+
+/** Tag-6D stage: the ATOM splash over the Secrets demo home, with a replay
+    chip once the reveal lands. */
+function AtomSplashDemo() {
+  const [generation, setGeneration] = useState(0)
+  const [done, setDone] = useState(false)
+  return (
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <SecretsDemoHome />
+      <AtomSplash key={generation} onDone={() => setDone(true)} />
+      {done &&
+        // Harness chrome, not app chrome — the chip lives outside the
+        // device frame, beside the prototype switcher.
+        createPortal(
+          <button
+            type="button"
+            onClick={() => {
+              setDone(false)
+              setGeneration((g) => g + 1)
+            }}
+            className="fixed bottom-10 right-10 z-20 rounded-full bg-ink px-4 py-2 text-[12px] font-medium text-white outline-none transition-transform duration-200 ease-out active:scale-[0.97]"
+          >
+            Replay
+          </button>,
+          document.body,
+        )}
+    </div>
   )
 }
 
