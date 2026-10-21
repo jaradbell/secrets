@@ -79,7 +79,7 @@ const PILE_POSES = [
 const TOSS_OFFSET = 70
 const TOSS_VELOCITY = 500
 
-function UpcomingPage() {
+function UpcomingPage({ hideCaptions = false }: { hideCaptions?: boolean }) {
   // Which booking leads the pile. Swipe (or tap) to send it to the back —
   // `toss` holds the fling direction for the beat the card is airborne.
   const [front, setFront] = useState(0)
@@ -155,13 +155,24 @@ function UpcomingPage() {
         </div>
 
         {/* The state's name hugs the pile — anchored just past the cards'
-            lower edge (half a scaled ticket below their shared center). */}
-        <div className="pointer-events-none absolute inset-x-0 top-1/2 mt-[148px] text-center">
+            lower edge (half a scaled ticket below their shared center).
+            Steps aside (hideCaptions) while a host surface needs the
+            airspace — e.g. the demo's utterance dial. */}
+        <motion.div
+          className="pointer-events-none absolute inset-x-0 top-1/2 mt-[148px] text-center"
+          initial={false}
+          animate={
+            hideCaptions
+              ? { opacity: 0, y: -6, filter: 'blur(4px)' }
+              : { opacity: 1, y: 0, filter: 'blur(0px)' }
+          }
+          transition={{ duration: 0.25, ease: EASE }}
+        >
           <p className="text-[15px] font-medium tracking-[-0.01em] text-ink">Upcoming</p>
           <p className="mt-1 text-[12px] text-ink-secondary">
             {UPCOMING.length} reservations · this weekend
           </p>
-        </div>
+        </motion.div>
       </div>
     </div>
   )
@@ -322,6 +333,7 @@ export function HomeStates({
   onOpenThread,
   pages = PAGES,
   onNotchPull,
+  hideCaptions,
 }: {
   /** Makes the Files rows doorways — 1C opens a project's trip file or
       drops into a thread. Without them the rows are inert sketch (1B). */
@@ -334,6 +346,9 @@ export function HomeStates({
       receipts space into the frame; past the threshold, release commits
       (the host opens the trip file). Without it the notch only pages. */
   onNotchPull?: () => void
+  /** The pile's captions fade out — for a host surface that needs their
+      airspace (the demo's utterance dial rises right where they sit). */
+  hideCaptions?: boolean
 } = {}) {
   const [page, setPage] = useState(0)
   // Travel direction feeds the slide variants: forward pages enter from
@@ -389,7 +404,7 @@ export function HomeStates({
           transition={{ duration: 0.45, ease: EASE }}
         >
           {pages[page] === 'upcoming' ? (
-            <UpcomingPage />
+            <UpcomingPage hideCaptions={hideCaptions} />
           ) : pages[page] === 'files' ? (
             <FilesPage onOpenProject={onOpenProject} onOpenThread={onOpenThread} />
           ) : (

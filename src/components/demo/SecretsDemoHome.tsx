@@ -31,6 +31,7 @@ import { TripFile, WALLET_RECEIPTS } from '../transaction/TripFile'
 import { GooTransition } from '../voice/GooTransition'
 import { HomeStates } from '../voice/HomeStates'
 import { VoiceControl } from './VoiceControl'
+import type { UtteranceSuggestion } from './UtteranceDial'
 import { ProjectsMoodboard, type NewPin, type SpokenLine } from './ProjectsMoodboard'
 
 const EASE = [0.32, 0.72, 0, 1] as const
@@ -49,6 +50,51 @@ const SEGMENTS: { id: View; label: string }[] = [
   // in (the resting screen), not the product feature behind it.
   { id: 'assistant', label: 'Home' },
   { id: 'board', label: 'Board' },
+]
+
+/** The dock's speakable prompts, per face — phrased as utterances (things
+    you'd actually say aloud), not action labels, so the line teaches the
+    voice vocabulary while it suggests. Each carries its scripted reply
+    for the card. */
+const HOME_UTTERANCES: UtteranceSuggestion[] = [
+  {
+    text: 'What\u2019s on this weekend?',
+    reply:
+      'Three things \u2014 dinner at Valette tonight at 7:30, the Healdsburg stay checks in Friday at 3, and your Sunday flight home is on time so far.',
+  },
+  {
+    text: 'Move Valette to 8 tonight',
+    reply:
+      'Done \u2014 Valette\u2019s moved to 8:00 tonight, still a table for two. OpenTable sent the updated confirmation.',
+  },
+  {
+    text: 'Find a brunch spot for Sunday',
+    reply:
+      'Three good Sunday options within a walk \u2014 Chalkboard at 11:15, Spoonbar at 11:45, and Baci has a patio table at noon. Want me to hold one?',
+  },
+  {
+    text: 'Anything need my attention?',
+    reply:
+      'One thing \u2014 Kyoto still has two open tasks: the flight hold expires Thursday, and the ryokan wants its deposit by Friday.',
+  },
+]
+
+const BOARD_UTTERANCES: UtteranceSuggestion[] = [
+  {
+    text: 'What changed since yesterday?',
+    reply:
+      'Two updates \u2014 Healdsburg confirmed your early check-in, and the Kyoto flight hold dropped $40.',
+  },
+  {
+    text: 'What\u2019s still unbooked?',
+    reply:
+      'Just Kyoto \u2014 flights and the ryokan are both still holding. Everything for this weekend is locked in.',
+  },
+  {
+    text: 'Pin this weekend\u2019s plan',
+    reply:
+      'Pinned \u2014 the weekend\u2019s three reservations now sit at the top of the board.',
+  },
 ]
 
 /** How long each face needs to clear before the swap commits. The board's
@@ -225,6 +271,11 @@ export function SecretsDemoHome() {
   // note (first one names it, the rest land as tasks).
   const [spoken, setSpoken] = useState<SpokenLine | null>(null)
 
+  // The dock's utterance dial is up — the pile's captions step out of its
+  // airspace (the rows and the captions are the same grey in the same
+  // column; hiding beats blurring).
+  const [dialUp, setDialUp] = useState(false)
+
   // The drawer — the shell owns the reveal (the app cards right over the
   // dark floor), so its open state lives on the frameCardBus, same as 5E.
   const menuOpen = useFrameCard()
@@ -333,6 +384,8 @@ export function SecretsDemoHome() {
     <VoiceControl
       key="root"
       dockAux
+      utterances={view === 'board' ? BOARD_UTTERANCES : HOME_UTTERANCES}
+      onDialChange={setDialUp}
       onPlus={composeFromDock}
       onUtterance={(t) => {
         if (composing) setSpoken((s) => ({ text: t, seq: (s?.seq ?? 0) + 1 }))
@@ -378,6 +431,7 @@ export function SecretsDemoHome() {
                   THREAD_TITLES are doorways into their conversation. */}
               <HomeStates
                 pages={['upcoming', 'files', 'connect']}
+                hideCaptions={dialUp}
                 onOpenProject={(id) => {
                   const title = THREAD_TITLES[id]
                   if (title) enterThread(title)

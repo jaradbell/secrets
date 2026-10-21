@@ -17,11 +17,12 @@ import { useReservationFlow, type ReservationSlots } from '../transaction/reserv
 import { auraBus } from '../shared/auraBus'
 import { ProgressiveBlur } from '../shared/ProgressiveBlur'
 import { tripFileBus, useTripFileOpen } from '../shared/tripFileBus'
-import { EdgeAura } from '../voice/EdgeAura'
 import { LiquidDistortion } from '../voice/LiquidDistortion'
 import { useVoiceInput, type VoiceStatus } from '../voice/useVoiceInput'
 import { VoiceGlyph } from '../voice/VoiceGlyph'
 import { VoiceOrb } from '../voice/VoiceOrb'
+import { BottomGlow } from './BottomGlow'
+import { UtteranceDial, type UtteranceSuggestion } from './UtteranceDial'
 
 const STATE_META: Record<VoiceStatus, { label: string }> = {
   idle: { label: 'Hold or tap to speak' },
@@ -310,7 +311,9 @@ export function VoiceControl({
   dockAux = false,
   onPlus,
   suggestions,
+  utterances,
   onUtterance,
+  onDialChange,
   simulatedFollowUps,
 }: {
   idleContent?: ReactNode
@@ -338,10 +341,18 @@ export function VoiceControl({
       deals these chips out of its wake (hold still pours into listening);
       tapping again or away tucks them back in. */
   suggestions?: DockSuggestion[]
+  /** Contextual speakable prompts for the dock's resting hint: the text
+      slot cycles through them (replacing "Hold or tap to speak"); a tap
+      commits one as if spoken, a press-and-hold expands the full hand as
+      the UtteranceDial. Each carries the demo's scripted reply. */
+  utterances?: UtteranceSuggestion[]
   /** A resting utterance completed (listening → thinking) and no flow was
       there to consume it — the host can act on the words (5B's grid births
       a project from them; its draft floor takes a name). */
   onUtterance?: (transcript: string) => void
+  /** The utterance dial rose / folded — hosts can clear the airspace
+      behind it (the home fades its pile captions out of the way). */
+  onDialChange?: (open: boolean) => void
   /** Demo script for follow-up holds once the draft's slots are complete:
       each press-and-hold speaks the next line (edits, and eventually the
       booking verb) instead of confirming outright. Exhausted, a hold falls
@@ -421,6 +432,10 @@ export function VoiceControl({
   // context's next scripted line.
   const replyCursor = useRef<Record<string, number>>({})
   const [cardReply, setCardReply] = useState<string | null>(null)
+  // A tapped utterance suggestion opens the card straight from idle — its
+  // stream starts now, not RESPOND_WINDOW_MS ago, so the auto-close waits
+  // out the whole stream.
+  const cardOpenedAtIdle = useRef(false)
   // The card doesn't slam shut when the loop lands at idle — a long reply
   // may still be streaming, so it stays up until the last word has landed
   // plus a reading beat.
@@ -428,11 +443,88 @@ export function VoiceControl({
     if (status !== 'idle' || !sheetOpen) return
     const words = cardReply ? cardReply.split(' ').length : 0
     const streamMs = STREAM_START_MS + words * STREAM_WORD_MS
-    const holdMs = Math.max(0, streamMs - RESPOND_WINDOW_MS) + READ_HOLD_MS
-    const timer = window.setTimeout(() => setSheetOpen(false), holdMs)
+    const elapsed = cardOpenedAtIdle.current ? 0 : RESPOND_WINDOW_MS
+    const holdMs = Math.max(0, streamMs - elapsed) + READ_HOLD_MS
+    const timer = window.setTimeout(() => {
+      setSheetOpen(false)
+      cardOpenedAtIdle.current = false
+    }, holdMs)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, sheetOpen])
+
+  // A suggestion committed from the hint dial — the words travel the same
+  // road as speech: the reply card blooms carrying the paired scripted
+  // line, and the host hears the utterance like any other.
+  const speakSuggestion = (u: UtteranceSuggestion) => {
+    cardOpenedAtIdle.current = true
+    setCardReply(u.reply)
+    setSheetOpen(true)
+    onUtterance?.(u.text)
+  }
+
+  // The utterance dial is up — the focus veil rises behind it (smaller
+  // than the composer's; the dial quiets the content, the hold floods it).
+  const [dialUp, setDialUp] = useState(false)
+
+  // The focus veil (after Monogram's hold-mic frost, 60fps shot
+  // monogram-tap-and-hold-mic-liquid-blur-pulse-interaction): a frosted
+  // layer floods up from the dock while a hold has the floor — tall for
+  // the composer's press (the whole surface melts under it; the liquid
+  // shimmer on the content does the warping), a shorter rise behind the
+  // utterance dial. Melts back down on release.
+  const veil = auraOn ? 'full' : dialUp ? 'dial' : 'none'
+
+  // The frost is alive, not a static pane — the reference's "pulse". A rAF
+  // loop writes the veil's blur, saturation and waterline directly every
+  // frame (no React re-render): the blur floods in from zero, a slow
+  // breath swells it while the hold is quiet, and the live mic level
+  // surges both the blur radius and the mask's feathered top edge — the
+  // glass visibly thickens and rises with your voice. Framer keeps
+  // height/opacity (the rise and melt); the loop owns the liquid.
+  const veilRef = useRef<HTMLDivElement>(null)
+  const veilModeRef = useRef(veil)
+  veilModeRef.current = veil
+  const veilActive = veil !== 'none'
+  useEffect(() => {
+    const el = veilRef.current
+    if (!veilActive || !el) return
+    // Pure glass — no painted wash at all. Any white milk on this light
+    // canvas reads as emitted light (the halo), so the veil is backdrop
+    // blur alone, run heavier to carry the quieting by itself.
+    const frost = (blur: number, sat: number, line: number) => {
+      const f = `blur(${blur.toFixed(2)}px) saturate(${sat.toFixed(3)})`
+      el.style.backdropFilter = f
+      el.style.setProperty('-webkit-backdrop-filter', f)
+      const mask = `linear-gradient(to top, black 0%, black ${line.toFixed(1)}%, transparent 100%)`
+      el.style.maskImage = mask
+      el.style.setProperty('-webkit-mask-image', mask)
+    }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      frost(veilModeRef.current === 'full' ? 22 : 16, 1.1, 55)
+      return
+    }
+    let raf = 0
+    let base = 0 // blur ramps up from nothing — the frost floods in
+    const t0 = performance.now()
+    const tick = (now: number) => {
+      const full = veilModeRef.current === 'full'
+      base += ((full ? 22 : 16) - base) * 0.1
+      // Idle breath (quiet hold) + the voice itself (smoothed RMS, fast
+      // attack / slow release from the hook) driving the surge.
+      const breath = 0.5 + 0.5 * Math.sin((now - t0) / 1400)
+      const level = full ? levelRef.current : 0
+      frost(
+        base + breath * 2 + level * 11,
+        (full ? 1.12 : 1.06) + level * 0.2,
+        55 + breath * 3 + level * 16, // the waterline rises with the voice
+      )
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [veilActive])
 
   useEffect(() => {
     if (status !== 'responding' || stage !== 'none' || tripOpen) return
@@ -668,10 +760,11 @@ export function VoiceControl({
     // min-h-0 keeps the column inside the fixed frame even when the content
     // slot wants more room (long threads scroll; the dock stays pinned).
     <div className="relative flex min-h-0 flex-1 flex-col px-4 pt-[var(--safe-top)] pb-[calc(var(--safe-bottom)+24px)]">
-      {/* Siri-style edge glow — pours around the frame from press until the
-          session ends. Above everything (details sheet z-30, dock z-40) but
-          inert. */}
-      <EdgeAura active={auraOn} levelRef={levelRef} />
+      {/* The session's living color — Gemini's response gradient along the
+          bottom edge instead of the old frame-wide beam (which fought the
+          frost): soft blobs on slow color journeys, rendered under the
+          focus veil so the liquid blur diffuses them into one wash. */}
+      <AnimatePresence>{auraOn && <BottomGlow key="bottom-glow" />}</AnimatePresence>
 
       {/* Conversation space — the content slot persists through the whole
           session (with a liquid shimmer while the press is held); the live
@@ -692,6 +785,41 @@ export function VoiceControl({
           </p>
         )}
       </div>
+
+      {/* Focus veil — Monogram's hold-mic frost in our materials: while a
+          hold has the floor, a frosted layer floods up from the dock and
+          the surface quiets under it. The composer's press raises the tall
+          veil (with the liquid shimmer already warping the content under
+          it); the utterance dial raises a shorter one — enough to clear
+          the air behind its rows without taking the whole screen. The top
+          edge is feathered by mask so the frost has a waterline, not a
+          seam; on release it melts back down the way it came. */}
+      <motion.div
+        ref={veilRef}
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-[34]"
+        initial={false}
+        animate={{
+          // The dial's veil backs only the hand itself — it stops short of
+          // the card pile (the host hides its captions instead, via
+          // onDialChange, so nothing competes in the rows' airspace).
+          height: veil === 'full' ? 640 : veil === 'dial' ? 360 : 160,
+          opacity: veil === 'none' ? 0 : 1,
+        }}
+        transition={{
+          default: { type: 'spring', stiffness: 240, damping: 30 },
+          opacity: { duration: 0.26, ease: 'easeOut' },
+        }}
+        // Blur / saturation / waterline are written per-frame by the pulse
+        // loop above — only the resting mask lives here. No background:
+        // the veil is pure glass (painted milk read as a glow halo).
+        style={{
+          maskImage:
+            'linear-gradient(to top, black 0%, black 55%, transparent 100%)',
+          WebkitMaskImage:
+            'linear-gradient(to top, black 0%, black 55%, transparent 100%)',
+        }}
+      />
 
       {/* Protective scrim — a progressive blur instead of a painted fade:
           stacked backdrop-filter bands, blur doubling per band, each masked
@@ -797,6 +925,34 @@ export function VoiceControl({
                   className="flex justify-center"
                 >
                   {dockHint}
+                </motion.div>
+              ) : utterances?.length &&
+                stage === 'none' &&
+                status === 'idle' &&
+                !error &&
+                !tripOpen &&
+                !voicePill &&
+                !sheetOpen &&
+                !((hideHintWhenFocused && flow?.focusedPlace) || flow?.hintSuppressed) ? (
+                // The resting hint as a suggestion surface — the line
+                // cycles speakable prompts; tap says one, hold deals the
+                // dial. Same slot, same airspace, no new chrome.
+                <motion.div
+                  key="utterance-dial"
+                  initial={{ opacity: 0, y: 8, filter: 'blur(6px)' }}
+                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                  exit={{ opacity: 0, y: -6, filter: 'blur(6px)' }}
+                  transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+                  className="flex justify-center"
+                >
+                  <UtteranceDial
+                    utterances={utterances}
+                    onCommit={speakSuggestion}
+                    onOpenChange={(o) => {
+                      setDialUp(o)
+                      onDialChange?.(o)
+                    }}
+                  />
                 </motion.div>
               ) : (
             <motion.p
@@ -1157,7 +1313,10 @@ export function VoiceControl({
             key="feedback-card"
             type="button"
             aria-label="Dismiss feedback"
-            onClick={() => setSheetOpen(false)}
+            onClick={() => {
+              setSheetOpen(false)
+              cardOpenedAtIdle.current = false
+            }}
             className="absolute inset-x-4 bottom-4 z-50 flex h-[29%] flex-col items-center justify-center overflow-hidden rounded-[36px] bg-[#131117] px-8 text-center outline-none"
             style={{ transformOrigin: '50% 78%' }}
             initial={{ opacity: 0, scale: 0.3, y: 12 }}
